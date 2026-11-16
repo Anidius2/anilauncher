@@ -1,0 +1,30 @@
+// Forge and NeoForge builds of AniLauncher Link. Shared code: ../src/main/java (the Fabric project,
+// without its entry point and Compat) and common/; each jar adds its own Compat.
+subprojects {
+	group = 'dev.anidius'
+	version = rootProject.property('mod_version')
+	apply plugin: 'java'
+
+	sourceSets {
+		// Compile-time copies of the two @Mod annotations; never packaged.
+		stubs {
+			java.srcDirs = ['../stubs/forge', '../stubs/neoforge']
+		}
+		main {
+			java {
+				srcDir '../../src/main/java'
+				srcDir '../common/java'
+				exclude '**/AniLink.java'
+				exclude { it.file.path.contains('/companion/src/') && it.name == 'Compat.java' }
+			}
+			resources.srcDir '../common/resources'
+			compileClasspath += stubs.output
+		}
+	}
+	tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+}
+
+tasks.register('buildAll') {
+	group = 'anilink'
+	dependsOn subprojects.collect { ":${it.name}:collectJar" }
+}

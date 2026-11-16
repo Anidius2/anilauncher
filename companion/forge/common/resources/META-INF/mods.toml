@@ -1,0 +1,12 @@
+modLoader="javafml"
+loaderVersion="[0,)"
+license="MIT"
+
+[[mods]]
+modId="anilink"
+version="1.0.0"
+displayName="AniLauncher Link"
+authors="Anidius"
+description='''Connects the game to AniLauncher: notifications, screenshots in the launcher gallery, resource packs and settings without leaving the game. Added by the launcher; switch it off in AniLauncher settings.'''
+# client only: servers never ask for it
+displayTest="IGNORE_ALL_VERSION"

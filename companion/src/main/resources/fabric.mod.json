@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "anilink",
+  "version": "${version}",
+  "name": "AniLauncher Link",
+  "description": "Connects the game to AniLauncher: notifications, screenshots in the launcher gallery, resource packs and settings without leaving the game. Added by the launcher; switch it off in AniLauncher settings.",
+  "authors": ["Anidius"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.anidius.anilink.AniLink"]
+  },
+  "depends": {
+    "minecraft": "${minecraft_range}",
+    "java": ">=${java_version}"
+  },
+  "custom": {
+    "modmenu": { "badges": ["library"] }
+  }
+}

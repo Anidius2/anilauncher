@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.log
+companion/.gradle/
+companion/build/
+companion/versions/*/build/
+companion/forge/.gradle/
+companion/forge/build/
+companion/forge/*/build/

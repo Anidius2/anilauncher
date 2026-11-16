@@ -1,0 +1,54 @@
+// Shared build script: Stonecutter runs it once for each version in settings.gradle.
+def mc = stonecutter.current.version
+def unobfuscated = stonecutter.current.parsed.matches('>=26.1')
+apply plugin: unobfuscated ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
+
+version = "${project.property('mod_version')}+mc${mc}"
+group = 'dev.anidius'
+base { archivesName = 'anilink' }
+
+stonecutter {
+	replacements {
+		regex(stonecutter.current.parsed.matches('>=1.21.11')) {
+			replace('\\bResourceLocation\\b', 'Identifier', '\\bIdentifier\\b', 'ResourceLocation')
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.property('minecraft_version')}"
+	if (unobfuscated) {
+		implementation "net.fabricmc:fabric-loader:${project.property('loader_version')}"
+	} else {
+		mappings loom.officialMojangMappings()
+		modImplementation "net.fabricmc:fabric-loader:${project.property('loader_version')}"
+	}
+}
+
+def javaVersion = (project.property('java_version') as String) as int
+
+processResources {
+	def props = [version: project.version, minecraft_range: project.property('minecraft_range'), java_version: javaVersion]
+	inputs.properties props
+	filesMatching('fabric.mod.json') { expand props }
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.release = javaVersion
+	options.encoding = 'UTF-8'
+}
+
+java {
+	sourceCompatibility = JavaVersion.toVersion(javaVersion)
+	targetCompatibility = JavaVersion.toVersion(javaVersion)
+}
+
+def modJar = unobfuscated ? tasks.named('jar') : tasks.named('remapJar')
+
+// The launcher picks the jar by Minecraft version: companion/anilink-<version folder>.jar
+tasks.register('collectJar', Copy) {
+	from(modJar)
+	into(rootProject.file('../src-tauri/companion'))
+	rename { "anilink-${mc}.jar" }
+	dependsOn 'build'
+}

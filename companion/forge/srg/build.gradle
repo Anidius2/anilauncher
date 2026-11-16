@@ -1,0 +1,19 @@
+plugins {
+	id 'net.neoforged.moddev.legacyforge' version '2.0.148'
+}
+
+base { archivesName = 'anilink-forge-srg' }
+
+// Compiled against Forge 1.20.1 and reobfuscated: the member names it uses are the same up to 1.20.4.
+legacyForge {
+	version = '1.20.1-47.4.28'
+}
+
+tasks.named('compileStubsJava') { options.release = 17 }
+tasks.named('compileJava') { options.release = 17 }
+
+tasks.register('collectJar', Copy) {
+	from(tasks.named('reobfJar'))
+	into(rootProject.file('../../src-tauri/companion'))
+	rename { 'anilink-forge-srg.jar' }
+}

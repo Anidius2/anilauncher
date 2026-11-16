@@ -1,0 +1,25 @@
+plugins {
+	id 'net.neoforged.moddev' version '2.0.148'
+}
+
+base { archivesName = 'anilink-forge-mojmap' }
+
+// Compiled against NeoForge 1.21.1; runs on any Forge/NeoForge that uses Mojang names at runtime.
+neoForge {
+	version = '21.1.266'
+}
+
+tasks.named('compileStubsJava') { options.release = 17 }
+// Java 17 bytecode: NeoForge 1.20.4 still runs on Java 17
+tasks.named('compileJava') { options.release = 17 }
+
+tasks.register('collectJar', Copy) {
+	from(tasks.named('jar'))
+	into(rootProject.file('../../src-tauri/companion'))
+	rename { 'anilink-forge-mojmap.jar' }
+}
+
+// Compile against NeoForge 1.21.1's Java 21 libraries while emitting Java 17 bytecode.
+configurations.named('compileClasspath') {
+	attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 21)
+}
