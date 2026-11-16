@@ -73,7 +73,8 @@ jobs:
           releaseBody: ${{ inputs.notes }}
           releaseDraft: false
           prerelease: false
-          args: --config "{\"bundle\":{\"createUpdaterArtifacts\":true}}"
+          # signed update files (latest.json) are switched on only for releases
+          args: --config src-tauri/tauri.release.conf.json
 
       # Keep the repository's version in step with the release
       - name: Save the new version in the repository
