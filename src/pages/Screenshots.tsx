@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { confirm, save } from "@tauri-apps/plugin-dialog";
+import { save } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../components/Confirm";
 import { api, errText, fileSrc, type Shot, type ShotMeta } from "../api";
 import { useStore } from "../store";
 import { Icon } from "../components/Icon";

@@ -127,7 +127,7 @@ pub fn auto(state: &AppState, id: &str, reason: &str, label: &str) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_snapshots(state: State<'_, AppState>, instance_id: String) -> Vec<Snapshot> {
     load(&state, &instance_id)
         .into_iter()
@@ -200,7 +200,7 @@ pub async fn restore_snapshot(state: State<'_, AppState>, instance_id: String, f
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_snapshot(state: State<'_, AppState>, instance_id: String, file: String) -> Res<()> {
     if file.contains('/') || file.contains('\\') || file.contains("..") {
         return Err("Неверный файл".into());

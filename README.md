@@ -148,3 +148,8 @@ npm run tauri build    # сборка установщика
 Нужны Node.js 20+, Rust и (на Windows) WebView2 — он уже есть в Windows 10/11.
 
 Файлы лаунчера хранятся в `%APPDATA%\dev.anidius.anilauncher`: сборки, библиотеки, ресурсы, Java и настройки.
+
+## Шрифты
+
+- Rubik, Inter, Pixelify Sans — SIL Open Font License (пакеты @fontsource).
+- «Minecraft Ten font cyrillic» — © vania 5617sonfan 2022, на основе «Minecraft Ten» от SinMedia Studios ([FontStruct](https://fontstruct.com/fontstructions/show/2198630/minecraft-ten-2-1)). Лицензия [CC BY-SA 3.0](http://creativecommons.org/licenses/by-sa/3.0/). Файл включён без изменений: `src/assets/fonts/`.

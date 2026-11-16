@@ -32,7 +32,7 @@ pub fn record(state: &AppState, instance_id: &str, start: u64, end: u64) {
     let _ = write_json(&path(state), &list);
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn play_sessions(state: State<'_, AppState>, since: u64) -> Vec<Session> {
     read_json::<Vec<Session>>(&path(&state))
         .unwrap_or_default()

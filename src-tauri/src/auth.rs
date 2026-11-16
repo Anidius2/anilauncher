@@ -105,7 +105,7 @@ fn view(state: &AppState) -> AccountsView {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_accounts(state: State<'_, AppState>) -> AccountsView {
     view(&state)
 }

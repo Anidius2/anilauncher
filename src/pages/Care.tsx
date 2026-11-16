@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../components/Confirm";
 import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { api, errText } from "../api";

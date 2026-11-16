@@ -75,6 +75,8 @@ export interface NewsItem {
 export interface Feed {
   news: NewsItem[];
   patchNotes: NewsItem[];
+  /** full-size Minecraft key art saved on disk (local paths) */
+  art?: string[];
 }
 
 export interface LocalProfile {
@@ -255,6 +257,8 @@ export interface UiPrefs {
   accent: string | null;
   radius: number | null;
   bodyFont: "inter" | "pixel" | "system";
+  /** Font of titles and the play button (an own file in settings overrides it) */
+  headingFont: "rubik" | "minecraft" | "pixel";
   sidebar: "full" | "compact";
   hiddenNav: NavPage[];
   startPage: NavPage | "last";
@@ -293,6 +297,7 @@ export const defaultUi: UiPrefs = {
   accent: null,
   radius: null,
   bodyFont: "inter",
+  headingFont: "rubik",
   sidebar: "full",
   hiddenNav: [],
   startPage: "home",

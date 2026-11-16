@@ -119,7 +119,7 @@ fn app_id(state: &AppState) -> String {
 }
 
 /// Shows (or with `None` clears) the status.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn discord_presence(state: State<'_, AppState>, presence: Option<Presence>) {
     let _ = worker().send(Msg::Set(app_id(&state), presence));
 }

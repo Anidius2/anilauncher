@@ -228,7 +228,9 @@ function ShotSlideshow() {
 
 /** A Mojang art for screens without their own picture; the same build always gets the same one. */
 export function mojangArt(feed: Feed | null, seed: string): string | null {
-  const pics = [...(feed?.patchNotes ?? []), ...(feed?.news ?? [])].map((n) => n.image).filter((x): x is string => !!x);
+  // Full-size key art; the small launcher pictures only if it hasn't loaded
+  const big = (feed?.art ?? []).map((p) => fileSrc(p)).filter((x): x is string => !!x);
+  const pics = big.length ? big : (feed?.news ?? []).map((n) => n.image).filter((x): x is string => !!x);
   if (!pics.length) return null;
   let h = 0;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -259,7 +261,7 @@ export function Home() {
   const [pickingArt, setPickingArt] = useState(false);
   const bedrock = settings.edition === "bedrock";
   const active = accounts.accounts.find((a) => a.active);
-  const heroSrc = !bedrock ? artSrc(selected?.art) : feed?.news.find((n) => n.image)?.image ?? null;
+  const heroSrc = !bedrock ? artSrc(selected?.art) : mojangArt(feed, "bedrock");
   const bg = settings.background;
 
   // Rain and wind sounds go with the living landscape

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../components/Confirm";
 import { WorldsDialog } from "./Worlds";
 import { GameRemote } from "./GameRemote";
 import { ReportDialog } from "./Care";

@@ -87,7 +87,7 @@ pub struct TrayState {
 }
 
 /// Rebuilds the menu, icon and tooltip from what the interface knows.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn tray_update<R: Runtime>(app: AppHandle<R>, state: TrayState) -> Res<()> {
     let Some(tray) = app.tray_by_id(TRAY_ID) else { return Ok(()) };
     let ru = state.lang != "en";
@@ -136,7 +136,7 @@ pub fn tray_update<R: Runtime>(app: AppHandle<R>, state: TrayState) -> Res<()> {
 }
 
 /// Hides the window to the tray.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn hide_to_tray<R: Runtime>(app: AppHandle<R>) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -144,7 +144,7 @@ pub fn hide_to_tray<R: Runtime>(app: AppHandle<R>) {
 }
 
 /// Start with Windows (hidden in the tray).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_autostart<R: Runtime>(app: AppHandle<R>, on: bool) -> Res<bool> {
     use tauri_plugin_autostart::ManagerExt;
     let al = app.autolaunch();

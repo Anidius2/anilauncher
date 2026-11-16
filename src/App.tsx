@@ -1,3 +1,4 @@
+import { ConfirmHost } from "./components/Confirm";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore, type Page } from "./store";
 import { Icon } from "./components/Icon";
@@ -164,17 +165,19 @@ export function App() {
   // Alt+F4 and the taskbar's "Close window" follow the same setting as the ✕ button
   const closeToTray = settings.ui.closeToTray;
   useEffect(() => {
+    // Only listen when the window should go to the tray: with a listener attached the window
+    // closes only after the listener lets it, so without one a normal close is never held up
+    if (!closeToTray) return;
     const off = getCurrentWindow().onCloseRequested((e) => {
-      if (closeToTray) {
-        e.preventDefault();
-        void api.hideToTray();
-      }
+      e.preventDefault();
+      void api.hideToTray();
     });
     return () => void off.then((f) => f());
   }, [closeToTray]);
   return (
     <div className="app">
       <TitleBar />
+      <ConfirmHost />
       <div className="body">
         <Sidebar />
         <main className="content" key={page}>

@@ -431,17 +431,17 @@ pub async fn link_send(state: State<'_, AppState>, instance_id: String, cmd: Val
     hub.send(&instance_id, cmd).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn link_status(state: State<'_, AppState>) -> HashMap<String, Value> {
     state.link.status()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn screenshot_meta(state: State<'_, AppState>) -> HashMap<String, Value> {
     read_json(&shot_meta_path(&state.root)).unwrap_or_default()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn world_times(state: State<'_, AppState>, instance_id: String) -> HashMap<String, Value> {
     read_json(&world_time_path(&state.root, &instance_id)).unwrap_or_default()
 }

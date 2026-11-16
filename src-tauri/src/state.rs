@@ -82,7 +82,7 @@ impl AppState {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_settings(state: State<'_, AppState>) -> Value {
     let mut s = state.settings();
     if let Some(obj) = s.as_object_mut() {
@@ -95,7 +95,7 @@ pub fn get_settings(state: State<'_, AppState>) -> Value {
     s
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_settings(state: State<'_, AppState>, settings: Value) -> Res<()> {
     let mut s = settings;
     if let Some(obj) = s.as_object_mut() {
@@ -106,7 +106,7 @@ pub fn save_settings(state: State<'_, AppState>, settings: Value) -> Res<()> {
 }
 
 /// Copies a picked file (avatar, art, font) into the launcher's media folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_media(state: State<'_, AppState>, path: String) -> Res<String> {
     let src = PathBuf::from(&path);
     let ext = src
@@ -126,7 +126,7 @@ pub fn import_media(state: State<'_, AppState>, path: String) -> Res<String> {
     Ok(dest.to_string_lossy().into())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_url(app: AppHandle, url: String) -> Res<()> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("Неверная ссылка".into());
@@ -136,7 +136,7 @@ pub fn open_url(app: AppHandle, url: String) -> Res<()> {
 }
 
 /// Theme export/import: plain text files the user picked in a dialog.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_text_file(path: String) -> Res<String> {
     let meta = std::fs::metadata(&path).ctx("Файл не найден")?;
     if meta.len() > 1_000_000 {
@@ -145,7 +145,7 @@ pub fn read_text_file(path: String) -> Res<String> {
     std::fs::read_to_string(&path).ctx("Не удалось прочитать файл")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_text_file(path: String, content: String) -> Res<()> {
     let lower = path.to_lowercase();
     if !(lower.ends_with(".json") || lower.ends_with(".anitheme")) {
@@ -155,7 +155,7 @@ pub fn write_text_file(path: String, content: String) -> Res<()> {
 }
 
 /// Total memory of this computer in MB (for the memory slider and advice).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn system_memory() -> u64 {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();
@@ -163,7 +163,7 @@ pub fn system_memory() -> u64 {
 }
 
 /// Opens a file from the launcher folder (crash report, log) in its default app.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_file(app: AppHandle, state: State<'_, AppState>, path: String) -> Res<()> {
     let p = std::fs::canonicalize(&path).ctx("Файл не найден")?;
     let root = std::fs::canonicalize(&state.root).ctx("Папка лаунчера не найдена")?;

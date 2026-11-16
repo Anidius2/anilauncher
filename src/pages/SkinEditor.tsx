@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { open, save, confirm } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../components/Confirm";
 import { MOUSE, Mesh, Object3D, Raycaster, Vector2 } from "three";
 import {
   CrouchAnimation,

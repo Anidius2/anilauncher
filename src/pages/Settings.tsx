@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../components/Confirm";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { defaultEvents, defaultSettings, defaultUi, type CustomTheme, type EventPrefs, type HomeBlock, type NavPage, type Settings, type UiPrefs } from "../api";
 import { ThemeEditor } from "./ThemeEditor";
@@ -293,6 +293,21 @@ export function SettingsPage() {
                     {(["inter", "pixel", "system"] as const).map((f) => (
                       <button key={f} className={`seg__btn ${ui.bodyFont === f ? "seg__btn--on" : ""}`} onClick={() => setUi({ bodyFont: f })}>
                         {f === "inter" ? "Inter" : f === "pixel" ? L("Пиксельный", "Pixel") : L("Системный", "System")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="setting">
+                  <span>{L("Шрифт заголовков", "Heading font")}</span>
+                  <div className="seg">
+                    {(["rubik", "minecraft", "pixel"] as const).map((f) => (
+                      <button
+                        key={f}
+                        className={`seg__btn ${(ui.headingFont ?? "rubik") === f ? "seg__btn--on" : ""}`}
+                        style={{ fontFamily: f === "rubik" ? "Rubik" : f === "minecraft" ? '"Minecraft Ten"' : '"Pixelify Sans"' }}
+                        onClick={() => setUi({ headingFont: f })}
+                      >
+                        {f === "rubik" ? "Rubik" : f === "minecraft" ? "Minecraft" : L("Пиксельный", "Pixel")}
                       </button>
                     ))}
                   </div>

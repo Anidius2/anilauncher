@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../components/Confirm";
 import { api, errText, fileSrc, type Backup, type Instance, type World } from "../api";
 import { useStore } from "../store";
 import { Modal, formatPlaytime } from "../components/Bits";

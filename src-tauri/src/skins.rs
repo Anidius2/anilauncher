@@ -81,7 +81,7 @@ fn add_to_library(state: &AppState, bytes: &[u8], name: &str, variant: &str) -> 
     Ok(skin)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_skins(state: State<'_, AppState>) -> Vec<SavedSkin> {
     load_lib(&state)
         .skins
@@ -90,14 +90,14 @@ pub fn list_skins(state: State<'_, AppState>) -> Vec<SavedSkin> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_skin(state: State<'_, AppState>, path: String, name: String, variant: String) -> Res<SavedSkin> {
     let bytes = std::fs::read(&path).ctx("Не удалось открыть файл")?;
     add_to_library(&state, &bytes, &name, &variant)
 }
 
 /// Saves a skin drawn in the editor (PNG as base64). Replaces `id` when given.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_skin_data(state: State<'_, AppState>, id: Option<String>, name: String, variant: String, data: String) -> Res<SavedSkin> {
     let raw = data.split_once(',').map(|(_, b)| b).unwrap_or(&data);
     let bytes = base64::engine::general_purpose::STANDARD.decode(raw).ctx("Неверные данные скина")?;
@@ -116,7 +116,7 @@ pub fn save_skin_data(state: State<'_, AppState>, id: Option<String>, name: Stri
     add_to_library(&state, &bytes, &name, &variant)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_skin(state: State<'_, AppState>, id: String, name: String, variant: String) -> Res<()> {
     let mut lib = load_lib(&state);
     if let Some(s) = lib.skins.iter_mut().find(|s| s.id == id) {
@@ -126,7 +126,7 @@ pub fn update_skin(state: State<'_, AppState>, id: String, name: String, variant
     save_lib(&state, &lib)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_skin(state: State<'_, AppState>, id: String) -> Res<()> {
     let mut lib = load_lib(&state);
     if let Some(s) = lib.skins.iter().find(|s| s.id == id) {
@@ -287,7 +287,7 @@ pub async fn set_cape(state: State<'_, AppState>, cape_id: Option<String>) -> Re
 
 /// Opens NameMC in its own window; skins downloaded there land in the collection.
 #[tauri::command]
-pub fn open_namemc<R: Runtime>(app: AppHandle<R>) -> Res<()> {
+pub async fn open_namemc<R: Runtime>(app: AppHandle<R>) -> Res<()> {
     if let Some(w) = app.get_webview_window("namemc") {
         let _ = w.set_focus();
         return Ok(());
@@ -337,7 +337,7 @@ pub fn open_namemc<R: Runtime>(app: AppHandle<R>) -> Res<()> {
 }
 
 /// Opens any PNG the user picked (editor import) as a data: URL.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_png(path: String) -> Res<String> {
     if !path.to_lowercase().ends_with(".png") {
         return Err("Нужен файл PNG".into());
@@ -348,7 +348,7 @@ pub fn read_png(path: String) -> Res<String> {
 }
 
 /// Saves the editor picture to a PNG file the user picked (editor export).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_png(path: String, data: String) -> Res<()> {
     if !path.to_lowercase().ends_with(".png") {
         return Err("Сохранять можно только PNG".into());

@@ -105,7 +105,7 @@ fn slash(p: &Path) -> String {
     p.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect::<Vec<_>>().join("/")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn estimate_launcher_backup(state: State<'_, AppState>, options: BackupOptions) -> BackupEstimate {
     let files = collect(&state, options);
     let builds = std::fs::read_dir(state.instances()).into_iter().flatten().flatten().filter(|e| e.path().join("instance.json").is_file()).count();
@@ -166,7 +166,7 @@ pub struct BackupInfo {
     accounts: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn inspect_launcher_backup(path: String) -> Res<BackupInfo> {
     let file = std::fs::File::open(&path).ctx("Файл не найден")?;
     let mut zip = zip::ZipArchive::new(file).ctx("Это не архив")?;

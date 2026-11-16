@@ -238,7 +238,7 @@ pub async fn bug_report(state: State<'_, AppState>, dest: String, instance_id: O
 }
 
 /// Shows a file the launcher just saved in Explorer.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reveal_file(app: tauri::AppHandle, path: String) -> Res<()> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().reveal_item_in_dir(path).ctx("Не удалось открыть папку")

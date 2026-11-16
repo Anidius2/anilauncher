@@ -374,7 +374,7 @@ pub async fn launch_instance<R: Runtime>(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn running_instances(state: State<'_, AppState>) -> Vec<String> {
     state
         .running
@@ -383,7 +383,7 @@ pub fn running_instances(state: State<'_, AppState>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stop_instance(state: State<'_, AppState>, id: String) -> Res<()> {
     let pid = state
         .running
@@ -409,7 +409,7 @@ pub fn stop_instance(state: State<'_, AppState>, id: String) -> Res<()> {
 }
 
 /// Bedrock is a Microsoft Store app: we can only start it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn launch_bedrock() -> Res<()> {
     #[cfg(windows)]
     {

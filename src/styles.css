@@ -1,5 +1,5 @@
 :root {
-  --font-heading: "Pixelify Sans", "Inter", sans-serif;
+  --font-heading: "Rubik", "Inter", sans-serif;
   --radius: 12px;
   --ease: cubic-bezier(.2, .8, .2, 1);
   color-scheme: dark;
@@ -759,3 +759,23 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .way__icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--bg); color: var(--accent); margin-bottom: 4px; }
 .way--main { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
 .way--main .way__icon { background: var(--accent); color: var(--on-accent); }
+.art-grid--wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-bottom: 8px; }
+.art-grid--wide .art-tile { aspect-ratio: 1170 / 500; }
+.confirm-back { z-index: 200; }
+.confirm { max-width: 440px; padding: 22px 22px 18px; }
+.confirm__text { margin: 0 0 18px; line-height: 1.45; white-space: pre-line; }
+.confirm__actions { display: flex; justify-content: flex-end; gap: 10px; }
+.btn--danger-solid { background: #dc2626; border-color: #dc2626; color: #fff; }
+.btn--danger-solid:hover { background: #b91c1c; }
+
+/* ---------- heading fonts ---------- */
+@font-face {
+  font-family: "Minecraft Ten";
+  src: url("./assets/fonts/minecraft-ten-cyrillic.ttf") format("truetype");
+  font-display: swap;
+}
+:root[data-heading="minecraft"] { --font-heading: "Minecraft Ten", "Rubik", "Inter", sans-serif; }
+:root[data-heading="pixel"] { --font-heading: "Pixelify Sans", "Inter", sans-serif; }
+/* the Minecraft font is capitals only and wide: a little more air, no extra spacing */
+:root[data-heading="minecraft"] h1, :root[data-heading="minecraft"] h2, :root[data-heading="minecraft"] h3 { letter-spacing: .5px; font-weight: 400; }
+:root[data-heading="minecraft"] .play { letter-spacing: 1px; font-weight: 400; }

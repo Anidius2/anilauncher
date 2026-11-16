@@ -93,7 +93,7 @@ export function useStore(): Store {
 async function loadHeadingFont(path?: string | null) {
   const root = document.documentElement;
   if (!path) {
-    root.style.setProperty("--font-heading", "'Pixelify Sans', 'Inter', sans-serif");
+    root.style.removeProperty("--font-heading"); // the stylesheet decides (Rubik, or pixel when chosen)
     return;
   }
   try {
@@ -102,9 +102,9 @@ async function loadHeadingFont(path?: string | null) {
     const face = new FontFace("AniHeading", `url("${src}")`);
     await face.load();
     document.fonts.add(face);
-    root.style.setProperty("--font-heading", "'AniHeading', 'Pixelify Sans', 'Inter', sans-serif");
+    root.style.setProperty("--font-heading", "'AniHeading', 'Rubik', 'Inter', sans-serif");
   } catch {
-    root.style.setProperty("--font-heading", "'Pixelify Sans', 'Inter', sans-serif");
+    root.style.removeProperty("--font-heading");
   }
 }
 
@@ -252,6 +252,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const ui = settings.ui;
     (root.style as CSSStyleDeclaration & { zoom: string }).zoom = String(ui.scale);
     root.dataset.font = ui.bodyFont;
+    root.dataset.heading = ui.headingFont ?? "rubik";
     root.dataset.sidebar = ui.sidebar;
     root.dataset.hero = ui.heroHeight;
     root.dataset.glass = ui.glass ? "on" : "off";

@@ -39,7 +39,7 @@ pub struct Shot {
     size: u64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_screenshots(state: State<'_, AppState>) -> Vec<Shot> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(state.instances()).into_iter().flatten().flatten() {
@@ -67,7 +67,7 @@ pub fn list_screenshots(state: State<'_, AppState>) -> Vec<Shot> {
     out
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn copy_image<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>, path: String) -> Res<()> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     let p = inside_root(&state, &path)?;
@@ -76,14 +76,14 @@ pub fn copy_image<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>, pat
 }
 
 /// Saves a copy of a launcher file to a place the user picked.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_copy(state: State<'_, AppState>, path: String, dest: String) -> Res<()> {
     let p = inside_root(&state, &path)?;
     std::fs::copy(&p, &dest).ctx("Не удалось сохранить копию")?;
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_screenshot(state: State<'_, AppState>, path: String) -> Res<()> {
     let p = inside_root(&state, &path)?;
     if p.parent().and_then(|d| d.file_name()).map(|n| n != "screenshots").unwrap_or(true) {
@@ -135,7 +135,7 @@ fn valid_world(name: &str) -> Res<()> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_worlds(state: State<'_, AppState>, instance_id: String) -> Vec<World> {
     let saves = instances::game_dir(&state, &instance_id).join("saves");
     let mut out: Vec<World> = std::fs::read_dir(&saves)
@@ -162,7 +162,7 @@ fn backups_dir(state: &AppState, id: &str) -> PathBuf {
     instances::game_dir(state, id).join("backups")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_backups(state: State<'_, AppState>, instance_id: String) -> Vec<Backup> {
     let mut out: Vec<Backup> = std::fs::read_dir(backups_dir(&state, &instance_id))
         .into_iter()
@@ -271,7 +271,7 @@ pub async fn restore_backup(state: State<'_, AppState>, instance_id: String, fil
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_backup(state: State<'_, AppState>, instance_id: String, file: String) -> Res<()> {
     valid_world(&file)?;
     std::fs::remove_file(backups_dir(&state, &instance_id).join(file)).ctx("Не удалось удалить бэкап")

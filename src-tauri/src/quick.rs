@@ -51,7 +51,7 @@ pub struct QuickItem {
     icon: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn quick_start(state: State<'_, AppState>) -> Vec<QuickItem> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(state.instances()).into_iter().flatten().flatten() {
@@ -122,13 +122,13 @@ fn read_keys(path: &Path) -> BTreeMap<String, String> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_controls(state: State<'_, AppState>) -> Vec<ControlProfile> {
     read_json(&profiles_path(&state)).unwrap_or_default()
 }
 
 /// Saves the key bindings of a build as a named profile.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_controls(state: State<'_, AppState>, instance_id: String, name: String) -> Res<Vec<ControlProfile>> {
     let inst = instances::load(&state, &instance_id)?;
     let keys = read_keys(&instances::game_dir(&state, &instance_id).join("options.txt"));
@@ -145,7 +145,7 @@ pub fn save_controls(state: State<'_, AppState>, instance_id: String, name: Stri
 }
 
 /// Writes a profile's key bindings into a build's options.txt (other settings stay untouched).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_controls(state: State<'_, AppState>, instance_id: String, name: String) -> Res<usize> {
     if state.running.lock().map(|r| r.contains_key(&instance_id)).unwrap_or(false) {
         return Err("Сначала закрой игру — она перезапишет настройки при выходе".into());
@@ -165,7 +165,7 @@ pub fn apply_controls(state: State<'_, AppState>, instance_id: String, name: Str
     Ok(profile.keys.len())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_controls(state: State<'_, AppState>, name: String) -> Res<Vec<ControlProfile>> {
     let mut list: Vec<ControlProfile> = read_json(&profiles_path(&state)).unwrap_or_default();
     list.retain(|p| p.name != name);

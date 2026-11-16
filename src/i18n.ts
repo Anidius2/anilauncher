@@ -94,6 +94,7 @@ const ru = {
 
   "art.title": "Выбери арт",
   "art.mojang": "Официальные арты Mojang",
+  "art.big": "Большие арты Minecraft",
   "art.own": "Загрузить свою картинку",
   "art.none": "Без арта",
   "art.loading": "Загружаю арты…",
@@ -140,7 +141,7 @@ const ru = {
   "set.sounds": "Звуки интерфейса",
   "set.animations": "Анимации",
   "set.memory": "Память для игры по умолчанию",
-  "set.font": "Шрифт заголовков",
+  "set.font": "Свой шрифт заголовков (файл)",
   "set.fontHint": "Можно выбрать файл шрифта на компьютере (например, Minecraft Ten). Он хранится только у тебя.",
   "set.fontPick": "Выбрать файл",
   "set.fontReset": "Стандартный",
@@ -672,6 +673,7 @@ const en: Record<Key, string> = {
 
   "art.title": "Pick art",
   "art.mojang": "Official Mojang art",
+  "art.big": "Big Minecraft art",
   "art.own": "Upload your own picture",
   "art.none": "No art",
   "art.loading": "Loading art…",
@@ -718,7 +720,7 @@ const en: Record<Key, string> = {
   "set.sounds": "Interface sounds",
   "set.animations": "Animations",
   "set.memory": "Default game memory",
-  "set.font": "Heading font",
+  "set.font": "Own heading font (file)",
   "set.fontHint": "Pick a font file on your computer (e.g. Minecraft Ten). It stays on your machine.",
   "set.fontPick": "Pick file",
   "set.fontReset": "Default",

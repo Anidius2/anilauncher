@@ -488,7 +488,7 @@ pub async fn list_content(state: State<'_, AppState>, instance_id: String, kind:
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn toggle_content(state: State<'_, AppState>, instance_id: String, kind: String, filename: String, enabled: bool) -> Res<()> {
     safe_name(&filename)?;
     let dir = instances::game_dir(&state, &instance_id).join(folder(&kind)?);
@@ -502,7 +502,7 @@ pub fn toggle_content(state: State<'_, AppState>, instance_id: String, kind: Str
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn remove_content(state: State<'_, AppState>, instance_id: String, kind: String, filename: String) -> Res<()> {
     safe_name(&filename)?;
     let dir = instances::game_dir(&state, &instance_id).join(folder(&kind)?);

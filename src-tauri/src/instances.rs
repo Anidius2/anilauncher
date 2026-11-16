@@ -87,7 +87,7 @@ fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_instances(state: State<'_, AppState>) -> Vec<Instance> {
     let mut list: Vec<Instance> = std::fs::read_dir(state.instances())
         .into_iter()
@@ -115,7 +115,7 @@ pub struct NewInstance {
     art: Option<Art>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_instance(state: State<'_, AppState>, data: NewInstance) -> Res<Instance> {
     let name = data.name.trim();
     if name.is_empty() {
@@ -141,7 +141,7 @@ pub fn create_instance(state: State<'_, AppState>, data: NewInstance) -> Res<Ins
     Ok(inst)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_instance(state: State<'_, AppState>, instance: Instance) -> Res<Instance> {
     if !valid_id(&instance.id) {
         return Err("Неверная сборка".into());
@@ -204,7 +204,7 @@ pub async fn duplicate_instance(state: State<'_, AppState>, id: String) -> Res<I
 }
 
 /// The last game output of a build (for the console).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_launch_log(state: State<'_, AppState>, id: String) -> Vec<String> {
     if !valid_id(&id) {
         return vec![];
@@ -214,7 +214,7 @@ pub fn read_launch_log(state: State<'_, AppState>, id: String) -> Vec<String> {
     lines[lines.len().saturating_sub(4000)..].iter().map(|s| s.to_string()).collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_instance(state: State<'_, AppState>, id: String) -> Res<()> {
     if !valid_id(&id) {
         return Err("Неверная сборка".into());
@@ -226,7 +226,7 @@ pub fn delete_instance(state: State<'_, AppState>, id: String) -> Res<()> {
 }
 
 /// Opens the build's game folder (or a subfolder like mods, saves, screenshots).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_instance_folder(app: AppHandle, state: State<'_, AppState>, id: String, sub: Option<String>) -> Res<()> {
     if !valid_id(&id) {
         return Err("Неверная сборка".into());

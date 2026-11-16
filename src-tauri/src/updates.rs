@@ -54,7 +54,7 @@ pub async fn check_update<R: Runtime>(app: AppHandle<R>) -> Res<Option<UpdateInf
     Ok(info)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn updates_configured() -> bool {
     endpoint().is_some()
 }

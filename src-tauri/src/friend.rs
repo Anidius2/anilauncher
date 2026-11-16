@@ -327,7 +327,7 @@ pub async fn analyze_drop(state: State<'_, AppState>, path: String) -> Res<DropI
 }
 
 /// Puts a dropped file where it belongs inside a build.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn place_drop(state: State<'_, AppState>, path: String, instance_id: String, kind: String) -> Res<String> {
     let src = PathBuf::from(&path);
     let name = src.file_name().map(|n| n.to_string_lossy().to_string()).ok_or("Неверный файл")?;
@@ -391,7 +391,7 @@ fn png_bytes(data: &str) -> Res<Vec<u8>> {
     base64::engine::general_purpose::STANDARD.decode(raw).ctx("Неверная картинка")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_png(path: String, data: String) -> Res<()> {
     if !path.to_lowercase().ends_with(".png") {
         return Err("Сохранять можно только PNG".into());
@@ -399,7 +399,7 @@ pub fn save_png(path: String, data: String) -> Res<()> {
     std::fs::write(&path, png_bytes(&data)?).ctx("Не удалось сохранить файл")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn copy_png<R: tauri::Runtime>(app: tauri::AppHandle<R>, data: String) -> Res<()> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     let img = tauri::image::Image::from_bytes(&png_bytes(&data)?).ctx("Неверная картинка")?;
