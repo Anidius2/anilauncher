@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { api, artSrc, errText, type Instance } from "../api";
+import { api, artSrc, errText, type Feed, type Instance } from "../api";
 import { useStore } from "../store";
 import { GameRemote } from "./GameRemote";
 import { DefaultArt, loaderLabel } from "../components/Bits";
@@ -15,8 +15,8 @@ import { fileSrc, type Shot } from "../api";
 import type { Key } from "../i18n";
 
 function BuildCard({ inst, onPick, active }: { inst: Instance; onPick: () => void; active: boolean }) {
-  const { play, running, preparing } = useStore();
-  const src = artSrc(inst.art);
+  const { play, running, preparing, feed } = useStore();
+  const src = artSrc(inst.art) ?? mojangArt(feed, inst.id);
   const busy = running.includes(inst.id) || !!preparing[inst.id];
   return (
     <div className={`card build-card ${active ? "card--active" : ""}`}>
@@ -60,16 +60,16 @@ function PlayButton() {
   }
   if (!accounts.accounts.length) {
     return (
-      <button className="play" onClick={() => go("profile")}>
-        {playText}
+      <button className="play play--setup" onClick={() => go("profile")}>
+        {t("home.playSignIn")}
       </button>
     );
   }
   if (!selected) {
     return (
       <>
-        <button className="play" onClick={() => setCreating(true)}>
-          {playText}
+        <button className="play play--setup" onClick={() => setCreating(true)}>
+          {t("home.playCreate")}
         </button>
         {creating && <BuildDialog onClose={() => setCreating(false)} />}
       </>
@@ -115,8 +115,43 @@ function PlayButton() {
   );
 }
 
+/** Shown until the player has an account and a build: what to do, in order. */
+function GettingStarted({ onCreate }: { onCreate: () => void }) {
+  const { t, accounts, instances, go } = useStore();
+  const signed = accounts.accounts.length > 0;
+  const built = instances.length > 0;
+  if (signed && built) return null;
+  const steps = [
+    { done: signed, title: t("start.s1"), text: t("start.s1t"), action: t("start.s1b"), run: () => go("profile") },
+    { done: built, title: t("start.s2"), text: t("start.s2t"), action: t("start.s2b"), run: onCreate },
+    { done: false, title: t("start.s3"), text: t("start.s3t"), action: null, run: null },
+  ];
+  const current = steps.findIndex((x) => !x.done);
+  return (
+    <section className="start">
+      <h2>{t("start.title")}</h2>
+      <ol className="start__steps">
+        {steps.map((x, i) => (
+          <li key={i} className={`start__step ${x.done ? "start__step--done" : ""} ${i === current ? "start__step--now" : ""}`}>
+            <span className="start__num">{x.done ? <Icon name="check" size={16} /> : i + 1}</span>
+            <span className="start__text">
+              <strong>{x.title}</strong>
+              <span className="muted small">{x.text}</span>
+            </span>
+            {x.action && !x.done && (
+              <button className={`btn ${i === current ? "btn--primary" : ""}`} disabled={i !== current} onClick={x.run ?? undefined}>
+                {x.action}
+              </button>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function BuildSelect() {
-  const { t, instances, selected, select } = useStore();
+  const { t, instances, selected, select, feed } = useStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -124,7 +159,7 @@ function BuildSelect() {
     window.addEventListener("mousedown", close);
     return () => window.removeEventListener("mousedown", close);
   }, []);
-  const src = artSrc(selected?.art);
+  const src = selected ? artSrc(selected.art) ?? mojangArt(feed, selected.id) : null;
   return (
     <div className="build-select" ref={ref}>
       <button
@@ -191,8 +226,17 @@ function ShotSlideshow() {
   );
 }
 
+/** A Mojang art for screens without their own picture; the same build always gets the same one. */
+export function mojangArt(feed: Feed | null, seed: string): string | null {
+  const pics = [...(feed?.patchNotes ?? []), ...(feed?.news ?? [])].map((n) => n.image).filter((x): x is string => !!x);
+  if (!pics.length) return null;
+  let h = 0;
+  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return pics[h % pics.length];
+}
+
 function HeroBackground({ buildArt }: { buildArt: string | null }) {
-  const { settings } = useStore();
+  const { settings, feed, selected } = useStore();
   const bg = settings.background;
   if (bg.mode === "live") return <LiveScene weather={bg.weather} animate={settings.animations} />;
   if (bg.mode === "shots") return <ShotSlideshow />;
@@ -204,7 +248,9 @@ function HeroBackground({ buildArt }: { buildArt: string | null }) {
       <img className="art-fill" src={src} alt="" />
     );
   }
-  return buildArt ? <img key={buildArt} className="art-fill hero__img" src={buildArt} alt="" /> : <DefaultArt />;
+  // No own art (or no build yet): a Mojang art from the feed; the drawn landscape only when offline
+  const src = buildArt ?? mojangArt(feed, selected?.id ?? "");
+  return src ? <img key={src} className="art-fill hero__img" src={src} alt="" /> : <DefaultArt />;
 }
 
 export function Home() {
@@ -292,6 +338,7 @@ export function Home() {
       </div>
 
       <div className="home-sections">
+        {!bedrock && <GettingStarted onCreate={() => setCreating(true)} />}
         {settings.streamer && settings.streamerNote.trim() && (
           <div className="yt-note">
             <span className="yt-note__dot" />

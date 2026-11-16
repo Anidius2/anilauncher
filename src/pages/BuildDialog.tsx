@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, artSrc, errText, type Art, type GameVersion, type Instance, type Loader } from "../api";
 import { useStore } from "../store";
-import { DefaultArt, Modal, Toggle } from "../components/Bits";
+import { DefaultArt, Modal, Toggle, loaderLabel } from "../components/Bits";
 import { Icon } from "../components/Icon";
 import { ArtPicker } from "./ArtPicker";
 import { installBaseMods } from "./Extras";
 import { sfx } from "../sounds";
+import type { Key } from "../i18n";
 
 const loaders: Array<{ id: Loader | "neoforge" | "forge"; label: string; soon?: boolean }> = [
   { id: "vanilla", label: "Vanilla" },
@@ -20,7 +21,7 @@ const loaders: Array<{ id: Loader | "neoforge" | "forge"; label: string; soon?: 
 export function BuildDialog({ instance, onClose }: { instance?: Instance; onClose: () => void }) {
   const { t, toast, reloadInstances, select, settings } = useStore();
   const editing = !!instance;
-  const [name, setName] = useState(instance?.name ?? "");
+  const [nameInput, setName] = useState(instance?.name ?? "");
   const [loader, setLoader] = useState<Loader>(instance?.loader ?? "fabric");
   const [versions, setVersions] = useState<GameVersion[] | null>(null);
   const [snapshots, setSnapshots] = useState(false);
@@ -74,8 +75,10 @@ export function BuildDialog({ instance, onClose }: { instance?: Instance; onClos
     [versions, snapshots, mc],
   );
 
+  const autoName = `${loader === "vanilla" ? "Minecraft" : loaderLabel(loader)} ${mc}`.trim();
   const save = async () => {
-    if (!name.trim() || !mc) return;
+    if (!mc) return;
+    const name = nameInput.trim() || autoName;
     setBusy(true);
     try {
       if (editing && instance) {
@@ -127,7 +130,7 @@ export function BuildDialog({ instance, onClose }: { instance?: Instance; onClos
 
           <label className="field">
             <span>{t("create.name")}</span>
-            <input value={name} maxLength={48} placeholder={t("create.namePh")} onChange={(e) => setName(e.target.value)} autoFocus />
+            <input value={nameInput} maxLength={48} placeholder={editing ? t("create.namePh") : autoName} onChange={(e) => setName(e.target.value)} autoFocus />
           </label>
 
           <div className="field">
@@ -151,6 +154,7 @@ export function BuildDialog({ instance, onClose }: { instance?: Instance; onClos
                 </button>
               ))}
             </div>
+            <span className="muted small">{t(`create.loaderHint.${loader}` as Key)}</span>
           </div>
 
           <div className="field-row">
@@ -263,7 +267,7 @@ export function BuildDialog({ instance, onClose }: { instance?: Instance; onClos
             <button className="btn" onClick={onClose}>
               {t("create.cancel")}
             </button>
-            <button className="btn btn--primary" disabled={busy || !name.trim() || !mc} onClick={save}>
+            <button className="btn btn--primary" disabled={busy || !mc} onClick={save}>
               {editing ? t("create.save") : t("create.create")}
             </button>
           </div>

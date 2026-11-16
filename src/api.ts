@@ -445,6 +445,7 @@ export const api = {
 
   listAccounts: () => invoke<AccountsView>("list_accounts"),
   loginStart: () => invoke<DeviceCode>("login_start"),
+  loginWindow: () => invoke<AccountsView>("login_window"),
   loginPoll: (deviceCode: string, interval: number) =>
     invoke<AccountsView>("login_poll", { deviceCode, interval }),
   nameAvailable: (accountId: string, name: string) => invoke<boolean>("name_available", { accountId, name }),

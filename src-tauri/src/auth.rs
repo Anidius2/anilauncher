@@ -10,6 +10,13 @@ const MS_DEVICE: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0
 const MS_TOKEN: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const SCOPE: &str = "XboxLive.signin offline_access";
 
+// Sign-in window: the public Microsoft sign-in used by the official Minecraft launcher.
+// Works for any licensed account without registering an own app.
+const LIVE_CLIENT: &str = "00000000402b5328";
+const LIVE_SCOPE: &str = "service::user.auth.xboxlive.com::MBI_SSL";
+const LIVE_REDIRECT: &str = "https://login.live.com/oauth20_desktop.srf";
+const LIVE_TOKEN: &str = "https://login.live.com/oauth20_token.srf";
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
@@ -31,6 +38,9 @@ pub struct Account {
     pub skin_url: Option<String>,
     #[serde(default)]
     pub needs_name: bool,
+    /// How the Microsoft token was obtained: "live" (sign-in window) or "" (device code with own Client ID)
+    #[serde(default)]
+    pub flow: String,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -196,19 +206,28 @@ pub async fn login_poll(state: State<'_, AppState>, device_code: String, interva
 /// Microsoft access token → Xbox Live → XSTS → Minecraft token → licence + profile.
 async fn minecraft_chain(state: &AppState, ms_access: &str, ms_refresh: Option<String>) -> Res<Account> {
     let http = &state.http;
-    let xbl: Value = http
-        .post("https://user.auth.xboxlive.com/user/authenticate")
-        .json(&json!({
-            "Properties": {"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com", "RpsTicket": format!("d={ms_access}")},
-            "RelyingParty": "http://auth.xboxlive.com",
-            "TokenType": "JWT"
-        }))
-        .send()
-        .await
-        .ctx("Нет соединения с Xbox Live")?
-        .json()
-        .await
-        .ctx("Неверный ответ Xbox Live")?;
+    // Tokens from the sign-in window are accepted with or without the "d=" prefix depending on the account
+    let mut xbl = Value::Null;
+    for ticket in [format!("d={ms_access}"), ms_access.to_string(), format!("t={ms_access}")] {
+        let resp = http
+            .post("https://user.auth.xboxlive.com/user/authenticate")
+            .header("x-xbl-contract-version", "1")
+            .json(&json!({
+                "Properties": {"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com", "RpsTicket": ticket},
+                "RelyingParty": "http://auth.xboxlive.com",
+                "TokenType": "JWT"
+            }))
+            .send()
+            .await
+            .ctx("Нет соединения с Xbox Live")?;
+        if resp.status().is_success() {
+            xbl = resp.json().await.ctx("Неверный ответ Xbox Live")?;
+            break;
+        }
+    }
+    if xbl.is_null() {
+        return Err("Xbox Live не принял вход. Попробуй войти ещё раз.".into());
+    }
     let xbl_token = str_of(&xbl, "Token")?;
     let uhs = xbl
         .pointer("/DisplayClaims/xui/0/uhs")
@@ -329,22 +348,26 @@ pub async fn ensure_fresh(state: &AppState, account_id: &str) -> Res<Account> {
         return Ok(acc);
     }
     let refresh = acc.ms_refresh.clone().ok_or("Нужно войти заново")?;
-    let client_id = state.client_id().ok_or("Не задан Client ID")?;
-    let resp: Value = state
-        .http
-        .post(MS_TOKEN)
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("client_id", client_id.as_str()),
-            ("refresh_token", refresh.as_str()),
-            ("scope", SCOPE),
-        ])
-        .send()
-        .await
-        .ctx("Нет соединения с Microsoft")?
-        .json()
-        .await
-        .ctx("Неверный ответ Microsoft")?;
+    let resp: Value = if acc.flow == "live" {
+        live_token(state, &[("grant_type", "refresh_token"), ("refresh_token", refresh.as_str())]).await?
+    } else {
+        let client_id = state.client_id().ok_or("Сессия истекла — войди в аккаунт заново.")?;
+        state
+            .http
+            .post(MS_TOKEN)
+            .form(&[
+                ("grant_type", "refresh_token"),
+                ("client_id", client_id.as_str()),
+                ("refresh_token", refresh.as_str()),
+                ("scope", SCOPE),
+            ])
+            .send()
+            .await
+            .ctx("Нет соединения с Microsoft")?
+            .json()
+            .await
+            .ctx("Неверный ответ Microsoft")?
+    };
     if resp.get("error").is_some() {
         return Err("Сессия истекла — войди в аккаунт заново.".into());
     }
@@ -356,6 +379,7 @@ pub async fn ensure_fresh(state: &AppState, account_id: &str) -> Res<Account> {
         .or(acc.ms_refresh.clone());
     let mut fresh = minecraft_chain(state, &access, new_refresh).await?;
     fresh.id = acc.id.clone();
+    fresh.flow = acc.flow.clone();
     file.accounts[idx] = fresh.clone();
     save(state, &file)?;
     Ok(fresh)
@@ -476,6 +500,105 @@ pub async fn remove_account(state: State<'_, AppState>, account_id: String) -> R
     if file.active.as_deref() == Some(account_id.as_str()) || file.accounts.is_empty() {
         file.active = file.accounts.first().map(|a| a.id.clone());
     }
+    save(&state, &file)?;
+    Ok(view(&state))
+}
+
+
+async fn live_token(state: &AppState, extra: &[(&str, &str)]) -> Res<Value> {
+    let mut form: Vec<(&str, &str)> = vec![("client_id", LIVE_CLIENT), ("redirect_uri", LIVE_REDIRECT), ("scope", LIVE_SCOPE)];
+    form.extend_from_slice(extra);
+    state
+        .http
+        .post(LIVE_TOKEN)
+        .form(&form)
+        .send()
+        .await
+        .ctx("Нет соединения с Microsoft")?
+        .json()
+        .await
+        .ctx("Неверный ответ Microsoft")
+}
+
+/// Opens a Microsoft sign-in window inside the launcher, waits for the user to sign in,
+/// then finishes the Xbox → Minecraft chain and saves the account.
+#[tauri::command]
+pub async fn login_window(app: tauri::AppHandle, state: State<'_, AppState>) -> Res<AccountsView> {
+    use std::sync::{Arc, Mutex};
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+
+    if let Some(old) = app.get_webview_window("mslogin") {
+        let _ = old.destroy();
+    }
+    let url = tauri::Url::parse_with_params(
+        "https://login.live.com/oauth20_authorize.srf",
+        &[
+            ("client_id", LIVE_CLIENT),
+            ("response_type", "code"),
+            ("scope", LIVE_SCOPE),
+            ("redirect_uri", LIVE_REDIRECT),
+            ("prompt", "select_account"),
+        ],
+    )
+    .map_err(|_| "Неверный адрес входа")?;
+    let (tx, rx) = tokio::sync::oneshot::channel::<Result<String, String>>();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+    let send = {
+        let tx = tx.clone();
+        move |v: Result<String, String>| {
+            if let Some(t) = tx.lock().ok().and_then(|mut g| g.take()) {
+                let _ = t.send(v);
+            }
+        }
+    };
+    let nav_send = send.clone();
+    let win = WebviewWindowBuilder::new(&app, "mslogin", WebviewUrl::External(url))
+        .title("Вход в аккаунт Microsoft")
+        .inner_size(500.0, 680.0)
+        .resizable(true)
+        .center()
+        .on_navigation(move |u| {
+            if u.as_str().starts_with(LIVE_REDIRECT) {
+                let q: std::collections::HashMap<String, String> = u.query_pairs().into_owned().collect();
+                nav_send(match (q.get("code"), q.get("error")) {
+                    (Some(c), _) => Ok(c.clone()),
+                    (_, Some(e)) if e == "access_denied" => Err("Вход отменён.".into()),
+                    (_, Some(e)) => Err(format!("Microsoft: {}", q.get("error_description").unwrap_or(e))),
+                    _ => Err("Microsoft не вернул код входа".into()),
+                });
+                return false;
+            }
+            true
+        })
+        .build()
+        .ctx("Не удалось открыть окно входа")?;
+    let close_send = send.clone();
+    win.on_window_event(move |e| {
+        if matches!(e, WindowEvent::Destroyed | WindowEvent::CloseRequested { .. }) {
+            close_send(Err("Вход отменён.".into()));
+        }
+    });
+
+    let got = tokio::time::timeout(std::time::Duration::from_secs(900), rx).await;
+    let _ = win.destroy();
+    let code = match got {
+        Ok(Ok(r)) => r?,
+        _ => return Err("Время на вход истекло. Попробуй ещё раз.".into()),
+    };
+
+    let resp = live_token(&state, &[("grant_type", "authorization_code"), ("code", code.as_str())]).await?;
+    if let Some(e) = resp.get("error_description").or(resp.get("error")).and_then(|v| v.as_str()) {
+        return Err(format!("Microsoft: {e}"));
+    }
+    let access = str_of(&resp, "access_token")?;
+    let refresh = resp.get("refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let _guard = state.accounts_lock.lock().await;
+    let mut account = minecraft_chain(&state, &access, refresh).await?;
+    account.flow = "live".into();
+    let mut file = load(&state);
+    file.accounts.retain(|a| !(a.kind == "msa" && a.uuid == account.uuid && !a.uuid.is_empty()));
+    file.active = Some(account.id.clone());
+    file.accounts.push(account);
     save(&state, &file)?;
     Ok(view(&state))
 }

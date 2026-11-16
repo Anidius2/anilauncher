@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, errText, type DeviceCode, type PublicAccount } from "../api";
+import { api, errText, type PublicAccount } from "../api";
 import { useStore } from "../store";
 import { Avatar } from "../components/Bits";
 import { Icon } from "../components/Icon";
@@ -72,74 +72,37 @@ function NameForm({ account, onDone }: { account: PublicAccount; onDone: () => v
 }
 
 function LoginCard() {
-  const { t, setAccounts, toast, accounts, go } = useStore();
-  const [code, setCode] = useState<DeviceCode | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { t, setAccounts, toast } = useStore();
+  const [waiting, setWaiting] = useState(false);
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
 
   const start = async () => {
+    setWaiting(true);
+    sfx.open();
     try {
-      const c = await api.loginStart();
-      setCode(c);
-      sfx.open();
-      void api.openUrl(c.verificationUri).catch(() => {});
-      const view = await api.loginPoll(c.deviceCode, c.interval);
+      const view = await api.loginWindow();
       if (!alive.current) return;
       setAccounts(view);
-      setCode(null);
       sfx.success();
       toast(t("toast.loggedIn"), "ok");
     } catch (e) {
-      setCode(null);
-      toast(errText(e), "error");
+      const msg = errText(e);
+      if (msg !== "Вход отменён.") toast(msg, "error");
+    } finally {
+      if (alive.current) setWaiting(false);
     }
   };
 
-  if (!accounts.clientIdSet) {
-    return (
-      <div className="notice">
-        <p>{t("acc.noClientId")}</p>
-        <button className="btn" onClick={() => go("settings")}>
-          {t("nav.settings")}
-        </button>
-      </div>
-    );
-  }
-  if (code) {
-    return (
-      <div className="login-code">
-        <strong>{t("acc.codeTitle")}</strong>
-        <p className="muted">{t("acc.codeText")}</p>
-        <div className="login-code__code">{code.userCode}</div>
-        <div className="inline-form">
-          <button className="btn btn--primary" onClick={() => void api.openUrl(code.verificationUri)}>
-            <Icon name="link" size={16} /> {t("acc.openPage")}
-          </button>
-          <button
-            className="btn"
-            onClick={async () => {
-              await navigator.clipboard.writeText(code.userCode);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-          >
-            <Icon name={copied ? "check" : "copy"} size={16} /> {copied ? t("acc.copied") : t("acc.copy")}
-          </button>
-        </div>
-        <span className="muted small pulse">{t("acc.waiting")}</span>
-      </div>
-    );
-  }
   return (
-    <button className="btn btn--primary btn--big" onClick={start}>
+    <button className="btn btn--primary btn--big" onClick={start} disabled={waiting}>
       <svg width="18" height="18" viewBox="0 0 23 23" aria-hidden="true">
         <rect x="1" y="1" width="10" height="10" fill="#f25022" />
         <rect x="12" y="1" width="10" height="10" fill="#7fba00" />
         <rect x="1" y="12" width="10" height="10" fill="#00a4ef" />
         <rect x="12" y="12" width="10" height="10" fill="#ffb900" />
       </svg>
-      {t("acc.signIn")}
+      {waiting ? t("acc.inWindow") : t("acc.signIn")}
     </button>
   );
 }
@@ -180,6 +143,50 @@ export function Profile() {
         </button>
       </div>
       {card && <PlayerCard onClose={() => setCard(false)} />}
+
+      <section className="panel">
+        <h2>{t("acc.accounts")}</h2>
+        <div className="account-list">
+          {accounts.accounts.map((a) => (
+            <div key={a.id} className={`account ${a.active ? "account--active" : ""}`}>
+              <span className="account__head">
+                {a.skinUrl ? (
+                  <span className="mc-head" aria-hidden="true">
+                    <span style={{ backgroundImage: `url("${a.skinUrl}")` }} />
+                    <span className="mc-head__hat" style={{ backgroundImage: `url("${a.skinUrl}")` }} />
+                  </span>
+                ) : (
+                  <Icon name="user" size={24} />
+                )}
+              </span>
+              <span className="account__text">
+                <strong>{settings.streamer ? t("yt.hidden") : a.name}</strong>
+                <span className="muted small">
+                  {a.kind === "msa" ? t("acc.licensed") : t("acc.offline")}
+                  {a.active ? ` · ${t("acc.active")}` : ""}
+                </span>
+              </span>
+              <span className="account__actions">
+                {!a.active && (
+                  <button className="btn btn--small" onClick={() => act(() => api.setActiveAccount(a.id))}>
+                    {t("acc.use")}
+                  </button>
+                )}
+                {a.kind === "msa" && !a.needsName && (
+                  <button className="btn btn--small" onClick={() => setRenaming(renaming === a.id ? null : a.id)}>
+                    {t("acc.changeName")}
+                  </button>
+                )}
+                <button className="btn btn--small btn--danger" onClick={() => act(() => api.removeAccount(a.id))}>
+                  {t("acc.remove")}
+                </button>
+              </span>
+              {(a.needsName || renaming === a.id) && <NameForm account={a} onDone={() => setRenaming(null)} />}
+            </div>
+          ))}
+        </div>
+        <LoginCard />
+      </section>
 
       <section className="panel">
         <h2>{t("acc.local")}</h2>
@@ -225,50 +232,6 @@ export function Profile() {
             ))}
           </div>
         </div>
-      </section>
-
-      <section className="panel">
-        <h2>{t("acc.accounts")}</h2>
-        <div className="account-list">
-          {accounts.accounts.map((a) => (
-            <div key={a.id} className={`account ${a.active ? "account--active" : ""}`}>
-              <span className="account__head">
-                {a.skinUrl ? (
-                  <span className="mc-head" aria-hidden="true">
-                    <span style={{ backgroundImage: `url("${a.skinUrl}")` }} />
-                    <span className="mc-head__hat" style={{ backgroundImage: `url("${a.skinUrl}")` }} />
-                  </span>
-                ) : (
-                  <Icon name="user" size={24} />
-                )}
-              </span>
-              <span className="account__text">
-                <strong>{settings.streamer ? t("yt.hidden") : a.name}</strong>
-                <span className="muted small">
-                  {a.kind === "msa" ? t("acc.licensed") : t("acc.offline")}
-                  {a.active ? ` · ${t("acc.active")}` : ""}
-                </span>
-              </span>
-              <span className="account__actions">
-                {!a.active && (
-                  <button className="btn btn--small" onClick={() => act(() => api.setActiveAccount(a.id))}>
-                    {t("acc.use")}
-                  </button>
-                )}
-                {a.kind === "msa" && !a.needsName && (
-                  <button className="btn btn--small" onClick={() => setRenaming(renaming === a.id ? null : a.id)}>
-                    {t("acc.changeName")}
-                  </button>
-                )}
-                <button className="btn btn--small btn--danger" onClick={() => act(() => api.removeAccount(a.id))}>
-                  {t("acc.remove")}
-                </button>
-              </span>
-              {(a.needsName || renaming === a.id) && <NameForm account={a} onDone={() => setRenaming(null)} />}
-            </div>
-          ))}
-        </div>
-        <LoginCard />
       </section>
 
       <section className="panel">

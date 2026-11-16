@@ -11,6 +11,7 @@ import { useStore } from "../store";
 import { DefaultArt, formatPlaytime, loaderLabel } from "../components/Bits";
 import { Icon } from "../components/Icon";
 import { BuildDialog } from "./BuildDialog";
+import { mojangArt } from "./Home";
 import { sfx } from "../sounds";
 import type { Key } from "../i18n";
 
@@ -109,9 +110,9 @@ function BuildMenu({ inst, onWorlds, onSnapshots, onControls, onRemote, onReport
 }
 
 function BuildTile({ inst, onEdit, onWorlds, onSnapshots, onControls, onRemote, onReport }: { inst: Instance; onEdit: () => void; onWorlds: () => void; onSnapshots: () => void; onControls: () => void; onRemote: () => void; onReport: () => void }) {
-  const { t, settings, play, running, preparing, select, selected, reloadInstances, toast, go } = useStore();
+  const { t, settings, play, running, preparing, select, selected, reloadInstances, toast, go, feed } = useStore();
   const [menu, setMenu] = useState(false);
-  const src = artSrc(inst.art);
+  const src = artSrc(inst.art) ?? mojangArt(feed, inst.id);
   const isRunning = running.includes(inst.id);
   const prog = preparing[inst.id];
 
@@ -211,13 +212,13 @@ export function Builds() {
         <h1>{t("builds.title")}</h1>
         <div className="page-head__tools">
           <input className="search" placeholder={t("builds.search")} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t("builds.search")} />
-          <button className="btn" onClick={() => setFriend(true)}>
+          <button className="btn" onClick={() => setFriend(true)} title={t("builds.wayFriend")}>
             <Icon name="link" size={18} /> {t("builds.friend")}
           </button>
-          <button className="btn" onClick={() => setCatalog(true)}>
+          <button className="btn" onClick={() => setCatalog(true)} title={t("builds.wayPacks")}>
             <Icon name="rocket" size={18} /> {t("builds.modpacks")}
           </button>
-          <button className="btn" onClick={doImport} disabled={importing}>
+          <button className="btn" onClick={doImport} disabled={importing} title={t("builds.wayImport")}>
             <Icon name="download" size={18} /> {importing ? t("builds.importing") : t("builds.import")}
           </button>
           <button className="btn btn--primary" onClick={() => setCreating(true)}>
@@ -225,7 +226,25 @@ export function Builds() {
           </button>
         </div>
       </div>
-      {instances.length === 0 && <p className="empty">{t("builds.empty")}</p>}
+      {instances.length === 0 && (
+        <div className="ways">
+          <p className="ways__lead">{t("builds.emptyLead")}</p>
+          {[
+            { icon: "plus", title: t("home.newBuild"), text: t("builds.wayNew"), run: () => setCreating(true), main: true },
+            { icon: "rocket", title: t("builds.modpacks"), text: t("builds.wayPacks"), run: () => setCatalog(true) },
+            { icon: "link", title: t("builds.friend"), text: t("builds.wayFriend"), run: () => setFriend(true) },
+            { icon: "download", title: t("builds.import"), text: t("builds.wayImport"), run: doImport },
+          ].map((w) => (
+            <button key={w.title} className={`way ${w.main ? "way--main" : ""}`} onClick={w.run} onMouseEnter={sfx.hover}>
+              <span className="way__icon">
+                <Icon name={w.icon as "plus"} size={24} />
+              </span>
+              <strong>{w.title}</strong>
+              <span className="muted small">{w.text}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="grid grid--builds">
         {list.map((i) => (
           <BuildTile key={i.id} inst={i} onEdit={() => setEditing(i)} onWorlds={() => setWorlds(i)} onSnapshots={() => setSnaps(i)} onControls={() => setControls(i)} onRemote={() => setRemote(i)} onReport={() => setReport(i)} />

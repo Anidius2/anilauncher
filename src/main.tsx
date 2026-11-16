@@ -23,3 +23,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </StoreProvider>
   </React.StrictMode>,
 );
+
+// Icon-only buttons explain themselves on hover: reuse their accessible name as the tooltip
+document.addEventListener("mouseover", (e) => {
+  const el = (e.target as HTMLElement | null)?.closest?.("button[aria-label]:not([title])");
+  if (el) el.setAttribute("title", el.getAttribute("aria-label") ?? "");
+});

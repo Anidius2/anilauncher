@@ -99,7 +99,7 @@ function Sidebar() {
     ? t("yt.mode")
     : active
       ? `${active.kind === "msa" ? t("acc.licensed") : t("acc.offline")} · ${active.name}`
-      : t("home.signIn");
+      : t("chip.signIn");
   const item = (n: { page: Page; icon: string; key: Key }) => (
     <button
       key={n.page}

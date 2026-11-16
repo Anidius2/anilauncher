@@ -77,6 +77,7 @@ pub fn run() {
             auth::list_accounts,
             auth::login_start,
             auth::login_poll,
+            auth::login_window,
             auth::name_available,
             auth::set_minecraft_name,
             auth::add_offline,

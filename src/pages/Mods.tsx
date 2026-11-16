@@ -4,6 +4,7 @@ import { useStore } from "../store";
 import { Toggle, loaderLabel } from "../components/Bits";
 import { Icon } from "../components/Icon";
 import { sfx } from "../sounds";
+import { BuildDialog } from "./BuildDialog";
 import type { Key } from "../i18n";
 
 const kinds: ContentKind[] = ["mod", "resourcepack", "shader"];
@@ -103,7 +104,7 @@ function ResultCard({ hit, instanceId, kind, installed, onInstalled }: { hit: Hi
 }
 
 export function Mods() {
-  const { t, instances, selected, settings, updateSettings, toast, go, modsSearch } = useStore();
+  const { t, instances, selected, settings, updateSettings, toast, modsSearch } = useStore();
   const [instanceId, setInstanceId] = useState(selected?.id ?? "");
   const inst = instances.find((i) => i.id === instanceId) ?? null;
   const [kind, setKind] = useState<ContentKind>(inst?.loader === "vanilla" ? "resourcepack" : "mod");
@@ -114,6 +115,7 @@ export function Mods() {
   const [hits, setHits] = useState<Hit[]>([]);
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [creatingBuild, setCreatingBuild] = useState(false);
   const [updates, setUpdates] = useState<ContentUpdate[] | null>(null);
   const [updating, setUpdating] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
@@ -165,9 +167,10 @@ export function Mods() {
           </span>
           <h1>{t("mods.title")}</h1>
           <p>{t("mods.noBuild")}</p>
-          <button className="btn btn--primary" onClick={() => go("builds")}>
-            {t("nav.builds")}
+          <button className="btn btn--primary" onClick={() => setCreatingBuild(true)}>
+            <Icon name="plus" size={18} /> {t("home.newBuild")}
           </button>
+          {creatingBuild && <BuildDialog onClose={() => setCreatingBuild(false)} />}
         </div>
       </div>
     );
