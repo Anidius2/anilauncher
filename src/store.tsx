@@ -202,6 +202,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           background: { ...defaultSettings.background, ...(s.background ?? {}) },
           widgets: { ...defaultSettings.widgets, ...(s.widgets ?? {}) },
           baseMods: s.baseMods ?? {},
+          gameDefaults: { ...defaultSettings.gameDefaults, ...(s.gameDefaults ?? {}) },
           streamer: s.streamer ?? false,
           streamerNote: s.streamerNote ?? "",
           ui: { ...defaultUi, ...(s.ui ?? {}) },

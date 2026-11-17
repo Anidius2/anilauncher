@@ -1,9 +1,9 @@
 // Quick start, controls profiles, "like a friend's", dropped files, base mods.
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { api, errText, fileSrc, type ControlProfile, type DropInfo, type Instance, type Loader, type QuickItem, type SharedFound } from "../api";
+import { api, errText, fileSrc, type ControlProfile, type DropInfo, type GameDefaults, type Instance, type Loader, type PickedProject, type QuickItem, type SharedFound } from "../api";
 import { useStore } from "../store";
-import { Modal, loaderLabel } from "../components/Bits";
+import { Modal, Toggle, loaderLabel } from "../components/Bits";
 import { Icon } from "../components/Icon";
 import { sfx } from "../sounds";
 import type { Key } from "../i18n";
@@ -233,6 +233,195 @@ export function BaseModsSettings() {
   );
 }
 
+// ---------- default game settings ----------
+
+const gameLangs: Array<[string, string]> = [
+  ["ru_ru", "Русский"], ["en_us", "English (US)"], ["en_gb", "English (UK)"], ["uk_ua", "Українська"], ["be_by", "Беларуская"],
+  ["kk_kz", "Қазақша"], ["uz_uz", "Oʻzbekcha"], ["de_de", "Deutsch"], ["fr_fr", "Français"], ["es_es", "Español"],
+  ["pl_pl", "Polski"], ["pt_br", "Português (BR)"], ["tr_tr", "Türkçe"], ["ja_jp", "日本語"], ["zh_cn", "简体中文"],
+];
+
+/** Small Modrinth picker for resource packs / shaders. */
+function PackPicker({ kind, onPick, taken, placeholder }: { kind: "resourcepack" | "shader"; onPick: (p: PickedProject) => void; taken: string[]; placeholder: string }) {
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<Array<{ projectId: string; title: string; iconUrl?: string | null }>>([]);
+  useEffect(() => {
+    if (!query.trim()) {
+      setHits([]);
+      return;
+    }
+    const id = setTimeout(() => {
+      api
+        .search(query, kind, null, null, 0, "relevance")
+        .then((r) => setHits(r.hits.slice(0, 6)))
+        .catch(() => setHits([]));
+    }, 300);
+    return () => clearTimeout(id);
+  }, [query, kind]);
+  return (
+    <div className="base-search">
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} aria-label={placeholder} />
+      {hits.length > 0 && (
+        <div className="base-search__hits">
+          {hits.map((h) => (
+            <button
+              key={h.projectId}
+              disabled={taken.includes(h.projectId)}
+              onClick={() => {
+                onPick({ projectId: h.projectId, title: h.title, icon: h.iconUrl ?? null });
+                setQuery("");
+                sfx.click();
+              }}
+            >
+              {h.iconUrl ? <img src={h.iconUrl} alt="" /> : <Icon name="mods" size={16} />} {h.title}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function GameDefaultsSettings() {
+  const { settings, updateSettings, toast } = useStore();
+  const ru = settings.lang === "ru";
+  const L = (a: string, b: string) => (ru ? a : b);
+  const d = settings.gameDefaults;
+  const set = (p: Partial<GameDefaults>) => updateSettings({ gameDefaults: { ...d, ...p } });
+  const [busy, setBusy] = useState(false);
+  const range = (label: string, key: "masterVolume" | "musicVolume" | "brightness" | "renderDistance" | "fov" | "maxFps", min: number, max: number, show: (v: number) => string) => (
+    <label className="setting">
+      <span>
+        {label}: <strong>{show(d[key])}</strong>
+      </span>
+      <input type="range" min={min} max={max} value={d[key]} onChange={(e) => set({ [key]: Number(e.target.value) } as Partial<GameDefaults>)} />
+    </label>
+  );
+  const flagRow = (label: string, key: "narrator" | "fullscreen" | "autoJump" | "subtitles" | "vsync" | "skipOnboarding") => (
+    <div className="setting">
+      <span>{label}</span>
+      <Toggle on={d[key]} onChange={(v) => set({ [key]: v } as Partial<GameDefaults>)} label={key} />
+    </div>
+  );
+  return (
+    <section className="panel settings-list">
+      <h2>{L("Базовые настройки игры", "Default game settings")}</h2>
+      <p className="muted small">
+        {L(
+          "Так будет настроена игра в каждой новой сборке при первом запуске: язык, громкость, графика и остальное. Ресурспаки и шейдер ниже сами скачаются в новую сборку и включатся.",
+          "Every new build starts the game with these settings on its first launch. The resource packs and shader below are downloaded into new builds and switched on.",
+        )}
+      </p>
+      <div className="setting">
+        <span>{L("Использовать базовые настройки", "Use default settings")}</span>
+        <Toggle on={d.enabled} onChange={(v) => set({ enabled: v })} label="defaults" />
+      </div>
+      {d.enabled && (
+        <>
+          <div className="setting">
+            <span>{L("Язык игры", "Game language")}</span>
+            <select value={d.lang} onChange={(e) => set({ lang: e.target.value })} aria-label="lang">
+              {gameLangs.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {range(L("Общая громкость", "Master volume"), "masterVolume", 0, 100, (v) => `${v}%`)}
+          {range(L("Музыка", "Music"), "musicVolume", 0, 100, (v) => `${v}%`)}
+          <div className="setting">
+            <span>{L("Графика", "Graphics")}</span>
+            <div className="seg">
+              {(["fast", "fancy", "fabulous"] as const).map((g) => (
+                <button key={g} className={`seg__btn ${d.graphics === g ? "seg__btn--on" : ""}`} onClick={() => set({ graphics: g })}>
+                  {g === "fast" ? L("Быстрая", "Fast") : g === "fancy" ? L("Детальная", "Fancy") : L("Превосходная", "Fabulous")}
+                </button>
+              ))}
+            </div>
+          </div>
+          {range(L("Дальность прорисовки", "Render distance"), "renderDistance", 2, 32, (v) => L(`${v} чанков`, `${v} chunks`))}
+          {range(L("Поле зрения (FOV)", "Field of view"), "fov", 30, 110, (v) => (v === 70 ? L("70 — обычное", "70 — normal") : v === 110 ? "Quake Pro" : `${v}`))}
+          {range(L("Яркость", "Brightness"), "brightness", 0, 100, (v) => (v === 0 ? L("тёмная", "moody") : v === 100 ? L("яркая", "bright") : `${v}%`))}
+          {range(L("Ограничение FPS", "Max FPS"), "maxFps", 10, 260, (v) => (v >= 260 ? L("без ограничения", "unlimited") : `${v}`))}
+          <div className="setting">
+            <span>{L("Размер интерфейса", "GUI scale")}</span>
+            <select value={d.guiScale} onChange={(e) => set({ guiScale: Number(e.target.value) })} aria-label="gui">
+              <option value={0}>{L("Авто", "Auto")}</option>
+              {[1, 2, 3, 4].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          {flagRow(L("Экранный диктор (озвучка меню)", "Narrator"), "narrator")}
+          {flagRow(L("Полноэкранный режим", "Fullscreen"), "fullscreen")}
+          {flagRow(L("Автопрыжок", "Auto-jump"), "autoJump")}
+          {flagRow(L("Субтитры звуков", "Subtitles"), "subtitles")}
+          {flagRow(L("Вертикальная синхронизация", "VSync"), "vsync")}
+          {flagRow(L("Пропускать окно настроек доступности при первом запуске", "Skip the accessibility screen on first launch"), "skipOnboarding")}
+
+          <h3 className="section-title">{L("Ресурспаки по умолчанию", "Default resource packs")}</h3>
+          <p className="muted small">{L("Первый в списке — самый важный: он будет выше остальных в игре.", "The first one wins: it sits on top of the others in the game.")}</p>
+          <div className="chips-list">
+            {d.packs.map((m) => (
+              <span key={m.projectId} className="mod-chip">
+                {m.icon ? <img src={m.icon} alt="" /> : <Icon name="mods" size={14} />}
+                {m.title}
+                <button aria-label="remove" onClick={() => set({ packs: d.packs.filter((x) => x.projectId !== m.projectId) })}>
+                  <Icon name="close" size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <PackPicker kind="resourcepack" taken={d.packs.map((p) => p.projectId)} placeholder={L("Найти ресурспак на Modrinth…", "Find a resource pack on Modrinth…")} onPick={(p) => set({ packs: [...d.packs, p] })} />
+
+          <h3 className="section-title">{L("Шейдер по умолчанию", "Default shader")}</h3>
+          <p className="muted small">
+            {L(
+              "Для шейдеров нужен мод-загрузчик шейдеров, лаунчер добавит его сам: Iris — на Fabric, Quilt и NeoForge; Oculus — на Forge до 1.20.1. Для Forge 1.21 и новее такого мода нет: шейдер положится в сборку и выберется в настройках OptiFine, а сам OptiFine нужно скачать с optifine.net и перетащить в лаунчер. В ванильные сборки шейдер не ставится.",
+              "Shaders need a shader mod, added by the launcher: Iris on Fabric, Quilt and NeoForge; Oculus on Forge up to 1.20.1. Forge 1.21+ has none: the pack is put in and selected for OptiFine, which you download from optifine.net and drop into the launcher. Vanilla builds get no shader.",
+            )}
+          </p>
+          {d.shader ? (
+            <div className="chips-list">
+              <span className="mod-chip">
+                {d.shader.icon ? <img src={d.shader.icon} alt="" /> : <Icon name="mods" size={14} />}
+                {d.shader.title}
+                <button aria-label="remove" onClick={() => set({ shader: null })}>
+                  <Icon name="close" size={12} />
+                </button>
+              </span>
+            </div>
+          ) : (
+            <PackPicker kind="shader" taken={[]} placeholder={L("Найти шейдер на Modrinth…", "Find a shader on Modrinth…")} onPick={(p) => set({ shader: p })} />
+          )}
+
+          <button
+            className="btn"
+            disabled={busy}
+            title={L("Язык, громкость, графика и остальное запишутся в уже созданные сборки. Их управление и прочие настройки не тронутся.", "Language, volume, graphics etc. are written into existing builds. Controls and other settings stay.")}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const n = await api.applyDefaultsToAll();
+                toast(L(`Настройки применены к сборкам: ${n}`, `Applied to ${n} builds`), "ok");
+              } catch (e) {
+                toast(errText(e), "error");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {L("Применить и к уже созданным сборкам", "Apply to existing builds too")}
+          </button>
+        </>
+      )}
+    </section>
+  );
+}
+
 // ---------- like a friend's ----------
 
 export function FriendDialog({ onClose }: { onClose: () => void }) {
@@ -404,7 +593,10 @@ export function FriendDialog({ onClose }: { onClose: () => void }) {
                 />
                 {f.icon ? <img src={f.icon} alt="" /> : <Icon name="mods" size={18} />}
                 <span className="content-row__text">
-                  <strong className="ellipsis">{f.title}</strong>
+                  <strong className="ellipsis">
+                    {f.title}
+                    {f.projectType !== "mod" && <span className="friend__type">{f.projectType === "shader" ? t("friend.typeShader") : t("friend.typePack")}</span>}
+                  </strong>
                   <span className={`small ellipsis ${f.available === false ? "friend__missing" : "muted"}`}>
                     {f.available === false ? t("friend.missing", { mc: useMc, loader: loaderLabel(useLoader) }) : f.source}
                   </span>

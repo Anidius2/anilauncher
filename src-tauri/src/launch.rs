@@ -249,6 +249,8 @@ pub async fn launch_instance<R: Runtime>(
         &game_dir,
     )
     .await?;
+    // first launch of a build: default game settings, packs and shader switched on
+    crate::defaults::first_run(&state, &id, &game_dir, &p.classpath);
     let mut args = build_args(&state, &inst, &account, &p, &game_dir, quick.as_ref())?;
     // The companion mod is loaded from the launcher's folder, never from mods/
     match crate::link::jvm_args(&app, &state, &id, &p.mc, &inst.loader, &p.json) {

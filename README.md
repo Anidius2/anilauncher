@@ -153,3 +153,10 @@ npm run tauri build    # сборка установщика
 
 - Rubik, Inter, Pixelify Sans — SIL Open Font License (пакеты @fontsource).
 - «Minecraft Ten font cyrillic» — © vania 5617sonfan 2022, на основе «Minecraft Ten» от SinMedia Studios ([FontStruct](https://fontstruct.com/fontstructions/show/2198630/minecraft-ten-2-1)). Лицензия [CC BY-SA 3.0](http://creativecommons.org/licenses/by-sa/3.0/). Файл включён без изменений: `src/assets/fonts/`.
+
+## Свои моды в лаунчере
+
+Папка `mods-catalog/`: положи туда jar своих модов (имя вида `mod-1.0.1+mc1.21.11.jar`) и отправь на GitHub.
+Действие «Mod catalog» само соберёт `catalog.json`, и моды появятся первыми в поиске «Моды → Найти» с пометкой «Мод автора лаунчера».
+Устанавливаются как обычные: нужная версия под сборку, Fabric API — сам, обновления — когда положишь новый jar.
+Когда мод появится на Modrinth с тем же названием, лаунчер покажет уже его.

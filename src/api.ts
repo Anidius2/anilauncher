@@ -374,6 +374,32 @@ export const defaultLink: LinkPrefs = { mirrorToasts: true, notifyUpdates: true,
 
 export const defaultEvents: EventPrefs = { newyear: true, halloween: true, birthday: true, particles: 1, decor: true, everywhere: true };
 
+export interface PickedProject {
+  projectId: string;
+  title: string;
+  icon?: string | null;
+}
+export interface GameDefaults {
+  enabled: boolean;
+  lang: string;
+  masterVolume: number;
+  musicVolume: number;
+  graphics: "fast" | "fancy" | "fabulous";
+  renderDistance: number;
+  fov: number;
+  guiScale: number;
+  maxFps: number;
+  brightness: number;
+  narrator: boolean;
+  fullscreen: boolean;
+  autoJump: boolean;
+  subtitles: boolean;
+  vsync: boolean;
+  skipOnboarding: boolean;
+  packs: PickedProject[];
+  shader: PickedProject | null;
+}
+
 export interface Settings {
   lang: "ru" | "en";
   theme: string;
@@ -399,6 +425,8 @@ export interface Settings {
   streamer: boolean;
   streamerNote: string;
   baseMods: Record<string, Array<{ projectId: string; title: string; icon?: string | null }>>;
+  /** Game options every new build starts with, plus default resource packs and shader */
+  gameDefaults: GameDefaults;
   ui: UiPrefs;
   events: EventPrefs;
   globalJvmArgs: string;
@@ -434,6 +462,11 @@ export const defaultSettings: Settings = {
   streamer: false,
   streamerNote: "",
   baseMods: {},
+  gameDefaults: {
+    enabled: false, lang: "ru_ru", masterVolume: 100, musicVolume: 50, graphics: "fancy", renderDistance: 12, fov: 70,
+    guiScale: 0, maxFps: 120, brightness: 50, narrator: false, fullscreen: false, autoJump: false, subtitles: false,
+    vsync: true, skipOnboarding: true, packs: [], shader: null,
+  },
   ui: defaultUi,
   events: defaultEvents,
   globalJvmArgs: "",
@@ -481,6 +514,8 @@ export const api = {
     invoke<{ hits: Hit[]; total: number }>("modrinth_search", { query, kind, mc, loader, offset, sort }),
   contentVersions: (instanceId: string, projectId: string, kind: ContentKind) =>
     invoke<ContentVersion[]>("modrinth_versions", { instanceId, projectId, kind }),
+  applyNewBuildDefaults: (instanceId: string) => invoke<string[]>("apply_new_build_defaults", { instanceId }),
+  applyDefaultsToAll: () => invoke<number>("apply_defaults_to_all"),
   installContent: (instanceId: string, kind: ContentKind, projectId: string, versionId?: string | null) =>
     invoke<string[]>("install_content", { instanceId, kind, projectId, versionId }),
   listContent: (instanceId: string, kind: ContentKind) => invoke<InstalledContent[]>("list_content", { instanceId, kind }),

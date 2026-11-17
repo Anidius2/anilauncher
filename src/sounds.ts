@@ -37,8 +37,17 @@ export function setVolume(v: number) {
   if (ambientGain) ambientGain.gain.value = ambientLevel * volume;
 }
 
+/** The launcher stays silent while you're in another window (the game): its sounds are for its own clicks only. */
+function inFocus(): boolean {
+  return typeof document === "undefined" || (document.hasFocus() && !document.hidden);
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("blur", () => void ctx?.suspend().catch(() => {}));
+  window.addEventListener("focus", () => void ctx?.resume().catch(() => {}));
+}
+
 function audio(): AudioContext | null {
-  if (!enabled) return null;
+  if (!enabled || !inFocus()) return null;
   if (!ctx) {
     try {
       ctx = new AudioContext();

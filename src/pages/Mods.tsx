@@ -55,14 +55,22 @@ function ResultCard({ hit, instanceId, kind, installed, onInstalled }: { hit: Hi
       <span className="mod-card__icon">{hit.iconUrl ? <img src={hit.iconUrl} alt="" loading="lazy" /> : <Icon name="mods" size={28} />}</span>
       <div className="mod-card__body">
         <div className="mod-card__top">
-          <button className="title-link ellipsis" title={t("mods.onModrinth")} onClick={() => void api.openUrl(`https://modrinth.com/project/${hit.slug}`)}>
-            {hit.title}
-          </button>
+          {hit.projectId.startsWith("own:") ? (
+            <strong className="ellipsis">{hit.title}</strong>
+          ) : (
+            <button className="title-link ellipsis" title={t("mods.onModrinth")} onClick={() => void api.openUrl(`https://modrinth.com/project/${hit.slug}`)}>
+              {hit.title}
+            </button>
+          )}
           <span className="muted small">{hit.author}</span>
         </div>
         <p className="muted small clamp">{hit.description}</p>
         <div className="mod-card__foot">
-          <span className="muted small">{t("mods.downloads", { n: fmt(hit.downloads, settings.lang) })}</span>
+          {hit.projectId.startsWith("own:") ? (
+            <span className="pill pill--ok">{t("mods.ownBadge")}</span>
+          ) : (
+            <span className="muted small">{t("mods.downloads", { n: fmt(hit.downloads, settings.lang) })}</span>
+          )}
           <span className="grow" />
           {versions && (
             <select className="select-small" value={versionId} onChange={(e) => setVersionId(e.target.value)} aria-label={t("mods.versions")}>
@@ -339,7 +347,7 @@ export function Mods() {
               <div key={c.filename} className={`content-row ${c.enabled ? "" : "content-row--off"}`}>
                 <span className="mod-card__icon mod-card__icon--small">{c.icon ? <img src={c.icon} alt="" loading="lazy" /> : <Icon name="mods" size={20} />}</span>
                 <span className="content-row__text">
-                  {c.projectId ? (
+                  {c.projectId && !c.projectId.startsWith("own:") ? (
                     <button className="title-link ellipsis" title={t("mods.onModrinth")} onClick={() => void api.openUrl(`https://modrinth.com/project/${c.projectId}`)}>
                       {c.title}
                     </button>

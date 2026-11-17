@@ -3,6 +3,7 @@ mod backup;
 mod conflicts;
 mod content;
 mod crash;
+mod defaults;
 mod discord;
 mod forge;
 mod friend;
@@ -11,6 +12,7 @@ mod launch;
 mod link;
 mod media;
 mod net;
+mod own;
 mod news;
 mod packs;
 mod quick;
@@ -78,6 +80,8 @@ pub fn run() {
             auth::login_start,
             auth::login_poll,
             auth::login_window,
+            defaults::apply_new_build_defaults,
+            defaults::apply_defaults_to_all,
             auth::name_available,
             auth::set_minecraft_name,
             auth::add_offline,

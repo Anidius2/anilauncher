@@ -86,7 +86,7 @@ fn safe_name(name: &str) -> Res<()> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Hit {
-    project_id: String,
+    pub project_id: String,
     slug: String,
     title: String,
     description: String,
@@ -115,6 +115,7 @@ pub async fn modrinth_search(
     if kind != "modpack" {
         folder(&kind)?;
     }
+    let (mc_for_own, loader_for_own) = (mc.clone(), loader.clone());
     let mut facets: Vec<Vec<String>> = vec![vec![format!("project_type:{kind}")]];
     if let Some(mc) = mc.filter(|m| !m.is_empty()) {
         facets.push(vec![format!("versions:{mc}")]);
@@ -147,7 +148,7 @@ pub async fn modrinth_search(
         .json()
         .await
         .ctx("Неверный ответ Modrinth")?;
-    let hits = resp
+    let hits: Vec<Hit> = resp
         .get("hits")
         .and_then(|h| h.as_array())
         .map(|a| {
@@ -169,10 +170,29 @@ pub async fn modrinth_search(
                 .collect()
         })
         .unwrap_or_default();
-    Ok(SearchResult {
-        hits,
-        total: resp.get("total_hits").and_then(|v| v.as_u64()).unwrap_or(0),
-    })
+    let mut hits = hits;
+    let total = resp.get("total_hits").and_then(|v| v.as_u64()).unwrap_or(0);
+    // The author's own mods go first, until the same mod is on Modrinth itself
+    if kind == "mod" && offset == 0 {
+        let own = crate::own::search(&state, &query, mc_for_own.as_deref(), loader_for_own.as_deref()).await;
+        let mut first: Vec<Hit> = own
+            .into_iter()
+            .filter(|m| !hits.iter().any(|h| h.title.eq_ignore_ascii_case(&m.name) || h.slug == m.id))
+            .map(|m| Hit {
+                project_id: format!("{}{}", crate::own::PREFIX, m.id),
+                slug: m.id.clone(),
+                title: m.name.clone(),
+                description: m.description.clone(),
+                icon_url: crate::own::icon_url(&m),
+                downloads: 0,
+                author: m.author.clone(),
+                categories: vec!["Anidius".into()],
+            })
+            .collect();
+        first.append(&mut hits);
+        hits = first;
+    }
+    Ok(SearchResult { hits, total })
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -215,6 +235,23 @@ async fn compatible_versions(state: &AppState, project: &str, kind: &str, mc: &s
 #[tauri::command]
 pub async fn modrinth_versions(state: State<'_, AppState>, instance_id: String, project_id: String, kind: String) -> Res<Vec<VersionInfo>> {
     let inst = instances::load(&state, &instance_id)?;
+    if project_id.starts_with(crate::own::PREFIX) {
+        let m = crate::own::find(&state, &project_id).await.ok_or("Этого мода больше нет в каталоге")?;
+        let mut vs: Vec<_> = m.versions.iter().filter(|v| v.mc == inst.mc_version && v.loaders.contains(&inst.loader)).collect();
+        vs.sort_by(|a, b| crate::own::cmp_versions(&b.version, &a.version));
+        return Ok(vs
+            .into_iter()
+            .map(|v| VersionInfo {
+                id: v.version.clone(),
+                name: format!("{} {}", m.name, v.version),
+                version_number: v.version.clone(),
+                version_type: "release".into(),
+                date: String::new(),
+                game_versions: vec![v.mc.clone()],
+                loaders: v.loaders.clone(),
+            })
+            .collect());
+    }
     let list = compatible_versions(&state, &project_id, &kind, &inst.mc_version, &inst.loader).await?;
     Ok(list
         .iter()
@@ -324,6 +361,15 @@ pub async fn install_content_inner(
     let mut queue: Vec<(String, Option<String>)> = vec![(project_id.clone(), version_id)];
     while let Some((project, version)) = queue.pop() {
         if !seen.insert(project.clone()) {
+            continue;
+        }
+        if project.starts_with(crate::own::PREFIX) {
+            let (entry, deps) = crate::own::install(state, &instance_id, &project, version.as_deref(), &mut meta).await?;
+            installed_titles.push(entry.title.unwrap_or(entry.filename));
+            let has_api = meta.entries.iter().any(|e| e.project_id.as_deref() == Some(crate::own::FABRIC_API));
+            if deps.iter().any(|d| d == "fabric-api" || d == "fabric") && !has_api && !seen.contains(crate::own::FABRIC_API) {
+                queue.push((crate::own::FABRIC_API.to_string(), None));
+            }
             continue;
         }
         let v: Value = match version {
@@ -541,7 +587,29 @@ pub async fn find_updates(state: &AppState, instance_id: &str) -> Res<Vec<Update
             .entries
             .iter()
             .filter(|e| e.kind == kind && e.project_id.is_some() && dir.join(&e.filename).exists())
+            .filter(|e| !e.project_id.as_deref().unwrap_or("").starts_with(crate::own::PREFIX))
             .collect();
+        if kind == "mod" {
+            // own mods: a newer file in the catalog
+            for e in meta.entries.iter().filter(|e| e.project_id.as_deref().unwrap_or("").starts_with(crate::own::PREFIX) && dir.join(&e.filename).exists()) {
+                let project = e.project_id.clone().unwrap_or_default();
+                if let Some(m) = crate::own::find(state, &project).await {
+                    if let Some(v) = crate::own::best(&m, &inst.mc_version, &inst.loader) {
+                        let cur = e.version_number.clone().unwrap_or_default();
+                        if crate::own::cmp_versions(&v.version, &cur).is_gt() {
+                            out.push(Update {
+                                kind: "mod".into(),
+                                filename: e.filename.clone(),
+                                title: e.title.clone().unwrap_or(e.filename.clone()),
+                                from: cur,
+                                to: v.version.clone(),
+                                version_id: format!("{project}@{}", v.version),
+                            });
+                        }
+                    }
+                }
+            }
+        }
         let mut by_hash = HashMap::new();
         for e in &entries {
             let h = e.sha1.clone().or_else(|| sha1_file(&dir.join(&e.filename)));
@@ -597,10 +665,15 @@ pub async fn apply_updates_inner(state: &AppState, instance_id: &str, only: &[St
     let mut meta = load_meta(state, instance_id);
     let mut n = 0;
     for u in updates.iter().filter(|u| only.is_empty() || only.contains(&u.filename)) {
-        let v: Value = get_json(&state.http, &format!("{API}/version/{}", u.version_id)).await?;
         let dir = instances::game_dir(state, instance_id).join(folder(&u.kind)?);
         let was_disabled = dir.join(format!("{}.disabled", u.filename)).exists();
-        let entry = install_version(state, instance_id, &u.kind, &v, &mut meta).await?;
+        let entry = if u.version_id.starts_with(crate::own::PREFIX) {
+            let (project, ver) = u.version_id.split_once('@').unwrap_or((&u.version_id, ""));
+            crate::own::install(state, instance_id, project, Some(ver), &mut meta).await?.0
+        } else {
+            let v: Value = get_json(&state.http, &format!("{API}/version/{}", u.version_id)).await?;
+            install_version(state, instance_id, &u.kind, &v, &mut meta).await?
+        };
         if entry.filename != u.filename {
             let _ = std::fs::remove_file(dir.join(&u.filename));
             let _ = std::fs::remove_file(dir.join(format!("{}.disabled", u.filename)));

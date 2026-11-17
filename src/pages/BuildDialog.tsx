@@ -101,6 +101,9 @@ export function BuildDialog({ instance, onClose }: { instance?: Instance; onClos
         const created = await api.createInstance({ name, mcVersion: mc, loader, loaderVersion: loaderVersion || null, art });
         select(created.id);
         toast(t("toast.created"), "ok");
+        if (settings.gameDefaults.enabled && (settings.gameDefaults.packs.length > 0 || settings.gameDefaults.shader)) {
+          void api.applyNewBuildDefaults(created.id).then((list) => list.length && toast(t("defaults.done", { n: list.length }), "ok"));
+        }
         if ((settings.baseMods[loader] ?? []).length > 0) {
           toast(t("base.installing"));
           void installBaseMods(created.id, loader, settings.baseMods).then((n) => n && toast(t("base.done", { n }), "ok"));

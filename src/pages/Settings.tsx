@@ -6,7 +6,7 @@ import { ThemeEditor } from "./ThemeEditor";
 import { Icon } from "../components/Icon";
 import { previewPack, sfx, soundPacks } from "../sounds";
 import type { Key } from "../i18n";
-import { BaseModsSettings } from "./Extras";
+import { BaseModsSettings, GameDefaultsSettings } from "./Extras";
 import { BackupSettings, DiscordSettings, UpdateSettings } from "./Care";
 import { api, errText } from "../api";
 import { useStore } from "../store";
@@ -714,6 +714,7 @@ export function SettingsPage() {
                 <p className="muted small">{L("Включение и выключение мода срабатывает со следующего запуска игры, остальное — сразу.", "Switching the mod on or off applies from the next game start; the rest applies at once.")}</p>
               </section>
               <BaseModsSettings />
+              <GameDefaultsSettings />
             </>
           )}
 
