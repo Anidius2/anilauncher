@@ -1,6 +1,6 @@
 [package]
 name = "anilauncher"
-version = "1.0.2"
+version = "1.1.0"
 description = "AniLauncher"
 authors = ["Anidius"]
 edition = "2021"
