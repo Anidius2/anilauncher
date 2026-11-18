@@ -64,6 +64,20 @@ async fn youtube_description(state: &AppState, url: &str) -> Option<String> {
     serde_json::from_str::<String>(&html[start..=i.min(html.len() - 1)]).ok()
 }
 
+/// "Sodium 0.6.13+mc1.21.11" -> "Sodium": a trailing version only spoils the search.
+fn strip_version(name: &str) -> String {
+    let mut words: Vec<&str> = name.split_whitespace().collect();
+    while words.len() > 1 {
+        let last = words[words.len() - 1].trim_start_matches(['v', 'V']);
+        let looks_like_version = last.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) && last.contains('.');
+        if !looks_like_version {
+            break;
+        }
+        words.pop();
+    }
+    words.join(" ")
+}
+
 /// Collects Modrinth slugs/ids from links and the names of everything else.
 async fn collect(state: &AppState, text: &str, depth: u8, slugs: &mut Vec<(String, String)>, names: &mut Vec<(String, Option<&'static str>)>) {
     let mr = regex::Regex::new(r"modrinth\.com/(mod|modpack|resourcepack|shader|plugin|datapack|project)/([A-Za-z0-9_.\-]+)").unwrap();
@@ -107,13 +121,20 @@ async fn collect(state: &AppState, text: &str, depth: u8, slugs: &mut Vec<(Strin
             if l.is_empty() || l.contains("://") || l.contains(".com/") || l.contains("youtu") {
                 continue;
             }
+            // the header of a list exported by the launcher: "Build — Minecraft 1.21.11, Fabric — 63 mods"
+            if l.contains(" — ") && l.contains("Minecraft ") {
+                continue;
+            }
             let name = l
                 .trim_start_matches(|c: char| c.is_ascii_digit() || "-*•.)#· ".contains(c))
                 .split(" - ")
                 .next()
                 .unwrap_or("")
-                .trim()
-                .to_string();
+                .split(" — ")
+                .next()
+                .unwrap_or("")
+                .trim();
+            let name = strip_version(name);
             if name.len() >= 2 && name.len() <= 60 {
                 names.push((name, hint));
             }
@@ -642,5 +663,32 @@ mod pack_live {
         let r = super::resolve_share(app.state(), text, Some("fabric".into()), Some("1.21.11".into())).await.unwrap();
         for f in &r.items { println!("{:<28} {:<13} <- {}", f.title, f.project_type, f.source); }
         println!("not found: {:?}", r.not_found);
+    }
+}
+
+#[cfg(test)]
+mod list_tests {
+    #[test]
+    fn exported_lists_read_back() {
+        assert_eq!(super::strip_version("Sodium 0.6.13+mc1.21.11"), "Sodium");
+        assert_eq!(super::strip_version("Fabric API v0.141.6"), "Fabric API");
+        assert_eq!(super::strip_version("Create 6"), "Create 6");
+        assert_eq!(super::strip_version("1.21 Pack"), "1.21 Pack");
+    }
+}
+
+#[cfg(test)]
+mod list_live {
+    /// cargo test --lib friend::list_live -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn exported_list_resolves() {
+        use tauri::Manager;
+        let app = tauri::test::mock_app();
+        app.manage(crate::state::AppState::with_root(std::env::temp_dir().join("anilauncher-listlive")));
+        let text = "Моя сборка — Minecraft 1.21.11, Fabric — 3 модов\n\nIris Shaders 1.10.4+mc1.21.11 — https://modrinth.com/project/YL57xq9U\nSodium 0.8.2+mc1.21.11 — https://modrinth.com/project/AANobbMI\nMod Menu 17.0.0".to_string();
+        let r = super::resolve_share(app.state(), text, Some("fabric".into()), Some("1.21.11".into())).await.unwrap();
+        let v = serde_json::to_value(&r).unwrap();
+        println!("{}", serde_json::to_string_pretty(&v).unwrap().chars().take(1500).collect::<String>());
     }
 }

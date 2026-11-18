@@ -39,29 +39,72 @@ pub struct Shot {
     size: u64,
 }
 
+fn is_image(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
+}
+
+/// Screenshots of deleted builds: `<root>/archive/<id>-<time>/screenshots`, with the build's name next to them.
+fn archive_dir(state: &AppState) -> PathBuf {
+    state.root.join("archive")
+}
+
+/// Moves a build's screenshots out before the build is deleted. Never fails the delete.
+pub fn archive_screenshots(state: &AppState, id: &str, name: &str) {
+    let src = instances::game_dir(state, id).join("screenshots");
+    let files: Vec<PathBuf> = std::fs::read_dir(&src)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.file_name().map(|n| is_image(&n.to_string_lossy())).unwrap_or(false))
+        .collect();
+    if files.is_empty() {
+        return;
+    }
+    let dest = archive_dir(state).join(format!("{id}-{}", now())).join("screenshots");
+    if std::fs::create_dir_all(&dest).is_err() {
+        return;
+    }
+    let _ = std::fs::write(dest.parent().unwrap().join("name.txt"), name);
+    for f in files {
+        let to = dest.join(f.file_name().unwrap());
+        if std::fs::rename(&f, &to).is_err() {
+            let _ = std::fs::copy(&f, &to);
+        }
+    }
+}
+
+fn push_shots(out: &mut Vec<Shot>, dir: &Path, id: &str, name: &str) {
+    for f in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let path = f.path();
+        let file = f.file_name().to_string_lossy().to_string();
+        if !is_image(&file) {
+            continue;
+        }
+        out.push(Shot {
+            modified: modified(&path),
+            size: f.metadata().map(|m| m.len()).unwrap_or(0),
+            path: path.to_string_lossy().into(),
+            name: file,
+            instance_id: id.to_string(),
+            instance_name: name.to_string(),
+        });
+    }
+}
+
 #[tauri::command(async)]
 pub fn list_screenshots(state: State<'_, AppState>) -> Vec<Shot> {
     let mut out = Vec::new();
+    for e in std::fs::read_dir(archive_dir(&state)).into_iter().flatten().flatten() {
+        let key = e.file_name().to_string_lossy().to_string();
+        let name = std::fs::read_to_string(e.path().join("name.txt")).unwrap_or_else(|_| key.clone());
+        push_shots(&mut out, &e.path().join("screenshots"), &format!("archive:{key}"), &name);
+    }
     for e in std::fs::read_dir(state.instances()).into_iter().flatten().flatten() {
         let id = e.file_name().to_string_lossy().to_string();
         let Ok(inst) = instances::load(&state, &id) else { continue };
-        let dir = instances::game_dir(&state, &id).join("screenshots");
-        for f in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-            let path = f.path();
-            let name = f.file_name().to_string_lossy().to_string();
-            let lower = name.to_lowercase();
-            if !(lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")) {
-                continue;
-            }
-            out.push(Shot {
-                modified: modified(&path),
-                size: f.metadata().map(|m| m.len()).unwrap_or(0),
-                path: path.to_string_lossy().into(),
-                name,
-                instance_id: id.clone(),
-                instance_name: inst.name.clone(),
-            });
-        }
+        push_shots(&mut out, &instances::game_dir(&state, &id).join("screenshots"), &id, &inst.name);
     }
     out.sort_by(|a, b| b.modified.cmp(&a.modified));
     out
@@ -275,4 +318,34 @@ pub async fn restore_backup(state: State<'_, AppState>, instance_id: String, fil
 pub fn delete_backup(state: State<'_, AppState>, instance_id: String, file: String) -> Res<()> {
     valid_world(&file)?;
     std::fs::remove_file(backups_dir(&state, &instance_id).join(file)).ctx("Не удалось удалить бэкап")
+}
+
+#[cfg(test)]
+mod archive_tests {
+    #[test]
+    fn screenshots_survive_a_deleted_build() {
+        use tauri::Manager;
+        let root = std::env::temp_dir().join(format!("anilauncher-archive-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let app = tauri::test::mock_app();
+        app.manage(crate::state::AppState::with_root(root.clone()));
+        let st = app.state::<crate::state::AppState>();
+        let inst = crate::instances::Instance { id: "old".into(), name: "Старая сборка".into(), mc_version: "1.21.11".into(), ..Default::default() };
+        crate::instances::store(&st, &inst).unwrap();
+        let shots = crate::instances::game_dir(&st, "old").join("screenshots");
+        std::fs::create_dir_all(&shots).unwrap();
+        std::fs::write(shots.join("2026-11-18_17.00.00.png"), b"png").unwrap();
+        std::fs::write(shots.join("notes.txt"), b"x").unwrap();
+
+        crate::instances::delete_instance(st.clone(), "old".into()).unwrap();
+        assert!(!crate::instances::dir(&st, "old").exists());
+        let list = super::list_screenshots(st.clone());
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].instance_name, "Старая сборка");
+        assert!(list[0].instance_id.starts_with("archive:old-"));
+        // and it can still be deleted from the gallery
+        super::delete_screenshot(st.clone(), list[0].path.clone()).unwrap();
+        assert!(super::list_screenshots(st).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

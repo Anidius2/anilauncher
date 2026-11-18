@@ -42,7 +42,9 @@ export function Screenshots() {
     return `${world}${dim ? ` · ${dim}` : ""}${xyz}`;
   };
 
-  const list = (shots ?? []).filter((s) => !filter || s.instanceId === filter);
+  const archived = (s: Shot) => s.instanceId.startsWith("archive:");
+  const list = (shots ?? []).filter((s) => !filter || (filter === "archive" ? archived(s) : s.instanceId === filter));
+  const buildName = (s: Shot) => (archived(s) ? `${s.instanceName} · ${t("shots.deleted")}` : s.instanceName);
   const cur = open !== null ? list[open] : null;
 
   useEffect(() => {
@@ -102,6 +104,7 @@ export function Screenshots() {
                 {i.name}
               </option>
             ))}
+            {(shots ?? []).some(archived) && <option value="archive">{t("shots.deletedBuilds")}</option>}
           </select>
         </div>
       </div>
@@ -119,7 +122,7 @@ export function Screenshots() {
           >
             <img src={fileSrc(s.path) ?? ""} alt={s.name} loading="lazy" />
             <span className="shot__meta">
-              <span className="ellipsis strong">{s.instanceName}</span>
+              <span className="ellipsis strong">{buildName(s)}</span>
               <span className="small ellipsis">{place(s) ?? date(s)}</span>
             </span>
           </button>
@@ -135,7 +138,7 @@ export function Screenshots() {
             <img src={fileSrc(cur.path) ?? ""} alt={cur.name} />
             <figcaption>
               <span>
-                <strong>{cur.instanceName}</strong> · {date(cur)}
+                <strong>{buildName(cur)}</strong> · {date(cur)}
                 {place(cur) && <span className="shot__place"> · {place(cur)}</span>}
               </span>
               <span className="lightbox__actions">

@@ -709,6 +709,26 @@ export function SettingsPage() {
                       <span>{L("Включать скачанные ресурспаки сразу в игре", "Switch downloaded resource packs on in the game")}</span>
                       <Toggle on={settings.link.packsLive} onChange={(v) => updateSettings({ link: { ...settings.link, packsLive: v } })} label="packs" />
                     </div>
+                    <h3 className="settings-sub">{L("Игра в стиле лаунчера", "The game in the launcher's style")}</h3>
+                    <p className="muted small">
+                      {L(
+                        "Для Minecraft 1.21 и новее на Fabric, Quilt, Forge и NeoForge. Арт и название сборки, твой ник и цвета текущей темы лаунчера. В новых меню всегда есть кнопка «Обычное меню», если нужно меню игры или другого мода. Меняется со следующего запуска игры.",
+                        "For Minecraft 1.21 and newer on Fabric, Quilt, Forge and NeoForge. The build's art and name, your nick and the colours of the current launcher theme. The new menus always have a “Classic menu” button for the game's or another mod's menu. Applies from the next game start.",
+                      )}
+                    </p>
+                    {(
+                      [
+                        ["menu", L("Главное меню: арт сборки и кнопка «Продолжить»", "Main menu: build art and a Continue button")],
+                        ["pause", L("Меню паузы: панель с местом, временем и координатами", "Pause menu: a panel with place, time and coordinates")],
+                        ["loading", L("Экран загрузки с артом сборки (у Forge и NeoForge остаётся их собственный)", "Loading screen with the build art (Forge and NeoForge keep their own)")],
+                        ["buttons", L("Кнопки игры в цветах темы (ресурспак, его можно выключить в игре)", "Game buttons in the theme colours (a resource pack you can turn off in the game)")],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <div className="setting" key={key}>
+                        <span>{label}</span>
+                        <Toggle on={settings.gameUi[key]} onChange={(v) => updateSettings({ gameUi: { ...settings.gameUi, [key]: v } })} label={key} />
+                      </div>
+                    ))}
                   </>
                 )}
                 <p className="muted small">{L("Включение и выключение мода срабатывает со следующего запуска игры, остальное — сразу.", "Switching the mod on or off applies from the next game start; the rest applies at once.")}</p>

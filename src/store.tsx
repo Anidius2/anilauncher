@@ -2,9 +2,18 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { api, defaultSettings, errText, fileSrc, type AccountsView, type CrashHint, type Feed, type Instance, type ModProblem, type QuickPlay, type Settings, defaultUi, defaultEvents, defaultLink, defaultDiscord, type NavPage, type LinkWorld, type UpdateInfo } from "./api";
+import { api, defaultSettings, errText, fileSrc, type AccountsView, type CrashHint, type Feed, type Instance, type ModProblem, type QuickPlay, type Settings, defaultUi, defaultEvents, defaultLink, defaultDiscord, defaultGameUi, type NavPage, type LinkWorld, type UpdateInfo } from "./api";
 import { translate, type Key } from "./i18n";
 import { applyTheme, themes } from "./themes";
+
+/** "#abc", "#aabbcc" or "rgb(r, g, b)" -> "#aabbcc". */
+function cssHex(v: string): string | null {
+  if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(v)) return ("#" + v.slice(1).split("").map((c) => c + c).join("")).toLowerCase();
+  const m = v.match(/^rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/i);
+  if (m) return "#" + [m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, "0")).join("");
+  return null;
+}
 import { seasonToday, type SeasonEvent } from "./components/Seasonal";
 import { setSfxFlags, setSoundPack, setSoundsEnabled, setVolume, sfx, soundPacks, themeSoundPack, type SoundPack } from "./sounds";
 
@@ -210,6 +219,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           globalJvmArgs: s.globalJvmArgs ?? "",
           companion: s.companion ?? true,
           link: { ...defaultLink, ...(s.link ?? {}) },
+          gameUi: { ...defaultGameUi, ...(s.gameUi ?? {}) },
           discord: { ...defaultDiscord, ...(s.discord ?? {}) },
         };
         // an old "all events off" switch carries over
@@ -248,6 +258,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     if (ui.radius !== null) root.style.setProperty("--radius", `${ui.radius}px`);
   }, [settings.theme, settings.customThemes, settings.ui.accent, settings.ui.radius]);
+  // The game's menus use the launcher's colours: keep a copy of the resolved theme in the settings
+  useEffect(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const pick = (v: string, fb: string) => cssHex(cs.getPropertyValue(v).trim()) ?? fb;
+    const colors = {
+      bg: pick("--bg", "#1b1b1b"),
+      panel: pick("--panel", "#2e2e2e"),
+      text: pick("--text", "#f2f2f2"),
+      muted: pick("--muted", "#b8b8b8"),
+      accent: pick("--accent", "#3c8527"),
+    };
+    const cur = settingsRef.current.gameUi;
+    if (JSON.stringify(cur?.colors) !== JSON.stringify(colors)) updateSettings({ gameUi: { ...defaultGameUi, ...cur, colors } });
+  }, [settings.theme, settings.customThemes, settings.ui.accent, updateSettings]);
   useEffect(() => {
     const root = document.documentElement;
     const ui = settings.ui;
@@ -355,6 +379,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (code !== null && code !== 0) {
           setCrashes((m) => ({ ...m, [instanceId]: { code, hints: hints ?? [], crashReport } }));
           toast(tr("toast.crashed", { code }), "error", { label: tr("toast.openConsole"), run: () => setConsoleFor(instanceId) });
+          // a known reason with a one-click fix: show it right away instead of waiting for a click
+          if ((hints ?? []).some((h) => (h.fixes ?? []).length > 0)) setConsoleFor(instanceId);
           notify("AniLauncher", tr("toast.crashed", { code }));
         } else toast(tr("toast.exited"));
         void reloadInstances();

@@ -222,6 +222,10 @@ pub fn delete_instance(state: State<'_, AppState>, id: String) -> Res<()> {
     if state.running.lock().map(|r| r.contains_key(&id)).unwrap_or(false) {
         return Err("Сначала закрой игру".into());
     }
+    // screenshots outlive the build: they move to the launcher's archive and stay in the gallery
+    if let Ok(inst) = load(&state, &id) {
+        crate::media::archive_screenshots(&state, &id, &inst.name);
+    }
     std::fs::remove_dir_all(dir(&state, &id)).ctx("Не удалось удалить сборку")
 }
 

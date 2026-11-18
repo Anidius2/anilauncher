@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, errText, type CrashHint } from "../api";
+import { api, errText, type CrashFix, type CrashHint } from "../api";
 import { useStore } from "../store";
 import { Modal, Toggle } from "../components/Bits";
 import { Icon } from "../components/Icon";
@@ -14,6 +14,9 @@ function level(line: string): "error" | "warn" | "info" {
 
 function hintText(h: CrashHint, t: (k: Key, v?: Record<string, string | number>) => string, lang: "ru" | "en") {
   if (h.kind === "mixin" && !h.detail) return t("hint.mixinUnknown");
+  const first = h.fixes?.[0];
+  if (h.kind === "missingMod" && first?.action === "install") return t("hint.needMod", { name: first.name });
+  if (h.kind === "missingMod" && first?.action === "update") return t("hint.oldMod", { name: first.name });
   let detail = h.detail;
   if (lang === "ru") {
     detail = detail
@@ -36,6 +39,8 @@ export function Console({ instanceId, onClose }: { instanceId: string; onClose: 
   const [problems, setProblems] = useState(false);
   const [report, setReport] = useState(false);
   const [auto, setAuto] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [done, setDone] = useState<string[]>([]);
   const box = useRef<HTMLDivElement>(null);
 
   // After a launcher restart the live buffer is empty: read the saved log once
@@ -47,6 +52,23 @@ export function Console({ instanceId, onClose }: { instanceId: string; onClose: 
     const f = filter.trim().toLowerCase();
     return (lines ?? []).filter((l) => (!f || l.toLowerCase().includes(f)) && (!problems || level(l) !== "info")).slice(-3000);
   }, [lines, filter, problems]);
+
+  // a new crash (or a fresh start) resets the fixes already applied
+  useEffect(() => setDone([]), [crash]);
+
+  const runFix = async (f: CrashFix) => {
+    const key = `${f.action}:${f.target}`;
+    setBusy(key);
+    try {
+      const msg = await api.crashFix(instanceId, f.action, f.target);
+      toast(msg, "ok");
+      setDone((d) => [...d, key]);
+    } catch (e) {
+      toast(errText(e), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (auto && box.current) box.current.scrollTop = box.current.scrollHeight;
@@ -60,9 +82,37 @@ export function Console({ instanceId, onClose }: { instanceId: string; onClose: 
           {crash.hints.length === 0 && <p className="muted">{t("console.noHints")}</p>}
           <ul>
             {crash.hints.map((h, i) => (
-              <li key={i}>{hintText(h, t, settings.lang)}</li>
+              <li key={i}>
+                {hintText(h, t, settings.lang)}
+                {(h.fixes ?? []).length > 0 && (
+                  <div className="crash__fixes">
+                    {(h.fixes ?? []).map((f) => {
+                      const key = `${f.action}:${f.target}`;
+                      return (
+                        <button
+                          key={key}
+                          className={`btn btn--small${f.action === "disable" ? "" : " btn--primary"}`}
+                          disabled={busy !== null || done.includes(key)}
+                          onClick={() => runFix(f)}
+                        >
+                          {done.includes(key) ? <Icon name="check" size={14} /> : null}
+                          {busy === key ? "…" : t(`fix.${f.action}` as Key, { name: f.name })}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </li>
             ))}
           </ul>
+          {done.length > 0 && !running.includes(instanceId) && (
+            <div className="crash__again">
+              <span>{t("fix.done")}</span>
+              <button className="btn btn--small btn--primary" onClick={() => api.launchInstance(instanceId).catch((e) => toast(errText(e), "error"))}>
+                <Icon name="play" size={14} /> {t("fix.again")}
+              </button>
+            </div>
+          )}
           {crash.crashReport && (
             <button className="btn btn--small" onClick={() => api.openFile(crash.crashReport!).catch((e) => toast(errText(e), "error"))}>
               {t("console.report")}

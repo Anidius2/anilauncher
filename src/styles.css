@@ -527,6 +527,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .crash { border: 1px solid #ef4444; background: color-mix(in srgb, #ef4444 10%, var(--side)); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .crash ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
 .crash p { margin: 0; }
+.crash__fixes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.crash__fixes .btn { display: inline-flex; align-items: center; gap: 4px; }
+.crash__again { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-weight: 600; }
 .console { height: 52vh; overflow: auto; background: #0b0b0b; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.5; user-select: text; }
 .console__line { white-space: pre-wrap; word-break: break-word; color: #d4d4d4; }
 .console__line--warn { color: #fbbf24; }
@@ -780,3 +783,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 :root[data-heading="minecraft"] h1, :root[data-heading="minecraft"] h2, :root[data-heading="minecraft"] h3 { letter-spacing: .5px; font-weight: 400; }
 :root[data-heading="minecraft"] .play { letter-spacing: 1px; font-weight: 400; }
 .friend__type { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-hi); vertical-align: middle; }
+.settings-sub { font-size: 15px; margin: 14px 0 0; }
+.modlist { display: flex; flex-direction: column; gap: 12px; }
+.modlist__opts { display: flex; flex-wrap: wrap; gap: 18px; }
+.modlist__text { width: 100%; min-height: 280px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.5; background: var(--input, rgba(0,0,0,.25)); color: var(--text); border: 1px solid var(--border, rgba(255,255,255,.12)); border-radius: 8px; padding: 10px 12px; }
+.modlist__actions { display: flex; gap: 8px; }

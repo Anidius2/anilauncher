@@ -4,6 +4,7 @@ mod conflicts;
 mod content;
 mod crash;
 mod defaults;
+mod gameui;
 mod discord;
 mod forge;
 mod friend;
@@ -116,6 +117,7 @@ pub fn run() {
             packs::install_modpack,
             content::optimize_instance,
             conflicts::check_mods,
+            crash::crash_fix,
             snapshots::list_snapshots,
             snapshots::create_snapshot,
             snapshots::restore_snapshot,

@@ -251,10 +251,20 @@ pub async fn launch_instance<R: Runtime>(
     .await?;
     // first launch of a build: default game settings, packs and shader switched on
     crate::defaults::first_run(&state, &id, &game_dir, &p.classpath);
+    // the button pack in the launcher's colours (1.21+); never a reason not to start
+    if let Err(e) = crate::gameui::sync_pack(&state, &inst, &p.classpath) {
+        eprintln!("AniLauncher theme pack: {e}");
+    }
+    let ui_config = crate::gameui::prepare(&state, &inst, &account).await;
     let mut args = build_args(&state, &inst, &account, &p, &game_dir, quick.as_ref())?;
     // The companion mod is loaded from the launcher's folder, never from mods/
     match crate::link::jvm_args(&app, &state, &id, &p.mc, &inst.loader, &p.json) {
-        Ok(Some(extra)) => extra.apply(&mut args),
+        Ok(Some(mut extra)) => {
+            if let Some(ui) = &ui_config {
+                extra.jvm.push(format!("-Danilink.ui={}", ui.to_string_lossy()));
+            }
+            extra.apply(&mut args)
+        }
         Ok(None) => {}
         Err(e) => eprintln!("AniLauncher Link: {e}"),
     }

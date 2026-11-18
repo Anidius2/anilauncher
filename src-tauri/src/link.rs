@@ -59,6 +59,31 @@ fn jar_for(mc: &str) -> Option<(&'static str, &'static [u8])> {
     }
 }
 
+/// Forge/NeoForge 1.21+ with Mojang names at runtime: the universal jar plus this version's restyled
+/// menus (built from the same per-version code as the Fabric jars).
+fn forge_ui_jar(mc: &str) -> Option<(&'static str, &'static [u8])> {
+    let parts: Vec<u32> = mc.split('.').map(|p| p.parse().unwrap_or(u32::MAX)).collect();
+    let (a, b, c) = (parts.first().copied()?, parts.get(1).copied().unwrap_or(0), parts.get(2).copied().unwrap_or(0));
+    macro_rules! jar {
+        ($v:literal) => {
+            Some(($v, include_bytes!(concat!("../companion/anilink-forge-", $v, ".jar")).as_slice()))
+        };
+    }
+    match (a, b, c) {
+        (1, 21, 0 | 1) => jar!("1.21.1"),
+        (1, 21, 2 | 3) => jar!("1.21.3"),
+        (1, 21, 4) => jar!("1.21.4"),
+        (1, 21, 5) => jar!("1.21.5"),
+        (1, 21, 6..=8) => jar!("1.21.8"),
+        (1, 21, 9 | 10) => jar!("1.21.10"),
+        (1, 21, 11) => jar!("1.21.11"),
+        (26, 1, _) => jar!("26.1"),
+        (26, 2, _) => jar!("26.2"),
+        (26, 3, _) => jar!("26.3"),
+        _ => None,
+    }
+}
+
 /// How a Forge/NeoForge version can be given a mod from outside `mods/`.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Way {
@@ -100,6 +125,11 @@ fn forge_plan(loader: &str, mc: &str, srg_runtime: Option<bool>) -> Option<(&'st
         Some(false) => moj,
         None => jar,
     };
+    if jar.0 == "mojmap" {
+        if let Some(ui) = forge_ui_jar(mc) {
+            return Some((ui.0, ui.1, way));
+        }
+    }
     Some((jar.0, jar.1, way))
 }
 
@@ -155,7 +185,7 @@ fn broken_path(state: &AppState) -> PathBuf {
 pub fn caused_crash(text: &str) -> bool {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        regex::Regex::new(r"(?i)dev[./]anidius[./]anilink|AniLauncher Link has|AniLauncher Link[^\n]{0,80}requires|\(anilink\)[^\n]{0,120}requires").unwrap()
+        regex::Regex::new(r"(?i)dev[./]anidius[./]anilink[./][a-z]|AniLauncher Link has|AniLauncher Link[^\n]{0,80}requires|\(anilink\)[^\n]{0,120}requires").unwrap()
     })
     .is_match(text)
 }
@@ -465,6 +495,9 @@ mod tests {
         assert!(caused_crash("at dev.anidius.anilink.Link.run(Link.java:40)"));
         assert!(caused_crash("AniLauncher Link requires version [0.17.0, ∞) of fabricloader, which is missing!"));
         assert!(caused_crash("Mod 'AniLauncher Link' (anilink) 1.0.0 requires version 1.21.1 of 'Minecraft'"));
+        assert!(caused_crash("at dev.anidius.anilink.ui.MenuScreen.init(MenuScreen.java:30)"));
+        // the jar's path in a Forge/NeoForge log is not a crash in our code
+        assert!(!caused_crash("Got mod coordinates anilink%%/x/companion/maven/dev/anidius/anilink-forge-1.21.11/1.0.0/anilink-forge-1.21.11-1.0.0.jar from env"));
         // merely listed among the loaded mods: not our fault
         assert!(!caused_crash("\\t- anilink 1.0.0+mc1.21.11\\n\\tAniLauncher Link 1.0.0 (anilink)\\nCaused by: java.lang.NullPointerException at com.example.Other"));
     }

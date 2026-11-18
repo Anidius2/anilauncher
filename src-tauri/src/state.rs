@@ -148,8 +148,9 @@ pub fn read_text_file(path: String) -> Res<String> {
 #[tauri::command(async)]
 pub fn write_text_file(path: String, content: String) -> Res<()> {
     let lower = path.to_lowercase();
-    if !(lower.ends_with(".json") || lower.ends_with(".anitheme")) {
-        return Err("Можно сохранять только файлы темы".into());
+    let allowed = [".json", ".anitheme", ".txt", ".md", ".html", ".csv"];
+    if !allowed.iter().any(|ext| lower.ends_with(ext)) {
+        return Err("Такой файл сохранить нельзя".into());
     }
     std::fs::write(&path, content).ctx("Не удалось сохранить файл")
 }

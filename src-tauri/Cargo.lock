@@ -43,12 +43,13 @@ dependencies = [
 
 [[package]]
 name = "anilauncher"
-version = "1.0.2"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "discord-rich-presence",
  "futures",
  "hex",
+ "image",
  "imagesize",
  "md-5",
  "regex",
@@ -2008,6 +2009,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

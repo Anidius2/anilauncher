@@ -28,9 +28,16 @@ export interface Instance {
   pinned?: boolean;
 }
 
+export interface CrashFix {
+  action: "install" | "update" | "disable" | "memory" | "java";
+  target: string;
+  name: string;
+}
+
 export interface CrashHint {
-  kind: "memory" | "java" | "missingMod" | "mixin" | "duplicate" | "driver" | "modError";
+  kind: "memory" | "java" | "missingMod" | "mixin" | "duplicate" | "driver" | "modError" | "wrongGame" | "incompatible";
   detail: string;
+  fixes?: CrashFix[];
 }
 
 export interface PublicAccount {
@@ -432,10 +439,22 @@ export interface Settings {
   globalJvmArgs: string;
   companion: boolean;
   link: LinkPrefs;
+  gameUi: GameUiPrefs;
   discord: DiscordPrefs;
   dataDir?: string;
   builtInClientId?: boolean;
 }
+
+/** How AniLauncher Link restyles the game (1.21+, Fabric and Quilt). Colours follow the launcher's theme. */
+export interface GameUiPrefs {
+  menu: boolean;
+  pause: boolean;
+  loading: boolean;
+  buttons: boolean;
+  colors?: { bg: string; panel: string; text: string; muted: string; accent: string };
+}
+
+export const defaultGameUi: GameUiPrefs = { menu: true, pause: true, loading: true, buttons: true };
 
 export const defaultSettings: Settings = {
   lang: "ru",
@@ -472,6 +491,7 @@ export const defaultSettings: Settings = {
   globalJvmArgs: "",
   companion: true,
   link: defaultLink,
+  gameUi: defaultGameUi,
   discord: defaultDiscord,
 };
 
@@ -503,6 +523,7 @@ export const api = {
   deleteInstance: (id: string) => invoke<void>("delete_instance", { id }),
   openInstanceFolder: (id: string, sub?: string) => invoke<void>("open_instance_folder", { id, sub }),
 
+  crashFix: (instanceId: string, action: string, target: string) => invoke<string>("crash_fix", { instanceId, action, target }),
   launchInstance: (id: string, quick?: QuickPlay | null) => invoke<void>("launch_instance", { id, quick: quick ?? null }),
   runningInstances: () => invoke<string[]>("running_instances"),
   stopInstance: (id: string) => invoke<void>("stop_instance", { id }),

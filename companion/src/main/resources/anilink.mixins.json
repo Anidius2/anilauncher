@@ -1,0 +1,9 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.anidius.anilink.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "anilink-refmap.json",
+  "client": ["ScreenSwapMixin", "LoadingOverlayMixin"],
+  "injectors": { "defaultRequire": 0 }
+}

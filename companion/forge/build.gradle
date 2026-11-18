@@ -15,6 +15,8 @@ subprojects {
 				srcDir '../../src/main/java'
 				srcDir '../common/java'
 				exclude '**/AniLink.java'
+				// the restyled menus are version-specific: they come from the per-version builds (see ../build.gradle, forgeJar)
+				exclude 'dev/anidius/anilink/ui/**', 'dev/anidius/anilink/mixin/**'
 				exclude { it.file.path.contains('/companion/src/') && it.name == 'Compat.java' }
 			}
 			resources.srcDir '../common/resources'

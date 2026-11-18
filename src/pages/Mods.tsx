@@ -5,6 +5,7 @@ import { Toggle, loaderLabel } from "../components/Bits";
 import { Icon } from "../components/Icon";
 import { sfx } from "../sounds";
 import { BuildDialog } from "./BuildDialog";
+import { ModListExport } from "./ModList";
 import type { Key } from "../i18n";
 
 const kinds: ContentKind[] = ["mod", "resourcepack", "shader"];
@@ -118,6 +119,7 @@ export function Mods() {
   const [kind, setKind] = useState<ContentKind>(inst?.loader === "vanilla" ? "resourcepack" : "mod");
   const [tab, setTab] = useState<"installed" | "browse">(modsSearch ? "browse" : "installed");
   const [installed, setInstalled] = useState<InstalledContent[] | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [query, setQuery] = useState(modsSearch ?? "");
   const [sort, setSort] = useState<(typeof sorts)[number]>("relevance");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -300,6 +302,12 @@ export function Mods() {
             <button className="btn" onClick={() => void api.openInstanceFolder(inst.id, kindFolder[kind]).catch((e) => toast(errText(e), "error"))}>
               <Icon name="folder" size={16} /> {t("mods.openFolder")}
             </button>
+            {installed && installed.length > 0 && (
+              <button className="btn" onClick={() => setExporting(true)} title={settings.lang === "en" ? "Copy or save the list — for a friend or another launcher" : "Скопировать или сохранить список — для друга или другого лаунчера"}>
+                <Icon name="link" size={16} /> {settings.lang === "en" ? "Share list" : "Список"}
+              </button>
+            )}
+            {exporting && installed && <ModListExport inst={inst} kind={kind} items={installed} onClose={() => setExporting(false)} />}
             {installed && installed.length > 1 && (
               <>
                 <button

@@ -248,6 +248,15 @@ fn scan_folder(dir: &Path) -> (Vec<ModInfo>, Vec<(String, String)>) {
     (mods, files)
 }
 
+/// The enabled top-level jar in `dir` that holds mod `id` (or provides it), with the mod's name.
+/// Mods bundled inside another jar are skipped: disabling the outer jar would remove more than asked.
+pub fn find_mod(dir: &Path, id: &str) -> Option<(String, String)> {
+    let (mods, _) = scan_folder(dir);
+    mods.iter()
+        .find(|m| !m.nested && (m.id == id || m.provides.iter().any(|(p, _)| p == id)))
+        .map(|m| (m.file.clone(), if m.name.is_empty() { m.id.clone() } else { m.name.clone() }))
+}
+
 /// The offline part of the check: works for any Fabric/Quilt mod, even ones not on Modrinth.
 fn check_local(mods: &[ModInfo], mc: &str, loader: &str) -> Vec<Problem> {
     let mut out = Vec::new();

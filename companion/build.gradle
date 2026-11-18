@@ -15,6 +15,16 @@ stonecutter {
 	}
 }
 
+if (!unobfuscated) {
+	// refmap for the mixins in obfuscated versions (26.x runs with readable names and needs none)
+	loom {
+		mixin {
+			useLegacyMixinAp = true
+			defaultRefmapName = 'anilink-refmap.json'
+		}
+	}
+}
+
 dependencies {
 	minecraft "com.mojang:minecraft:${project.property('minecraft_version')}"
 	if (unobfuscated) {
@@ -27,8 +37,16 @@ dependencies {
 
 def javaVersion = (project.property('java_version') as String) as int
 
+// The restyled menus exist for 1.21 and newer; older jars stay as they were.
+def withUi = stonecutter.current.parsed.matches('>=1.21')
+if (!withUi) {
+	sourceSets.main.java.exclude('dev/anidius/anilink/ui/**', 'dev/anidius/anilink/mixin/**')
+}
+
 processResources {
-	def props = [version: project.version, minecraft_range: project.property('minecraft_range'), java_version: javaVersion]
+	def props = [version: project.version, minecraft_range: project.property('minecraft_range'), java_version: javaVersion,
+		mixins: withUi ? '["anilink.mixins.json"]' : '[]']
+	if (!withUi) exclude('anilink.mixins.json')
 	inputs.properties props
 	filesMatching('fabric.mod.json') { expand props }
 }
@@ -51,4 +69,46 @@ tasks.register('collectJar', Copy) {
 	into(rootProject.file('../src-tauri/companion'))
 	rename { "anilink-${mc}.jar" }
 	dependsOn 'build'
+}
+
+// Forge and NeoForge (Mojang names at runtime) for 1.21+: the universal Forge jar plus this version's
+// menus and mixins, taken from the not-remapped jar (Mojang names, no refmap needed there).
+if (withUi) {
+	// built by forge/ (./gradlew -p forge buildAll); the same file the launcher ships as anilink-forge-mojmap.jar
+	def universal = rootProject.file('forge/mojmap/build/libs/anilink-forge-mojmap-1.0.0.jar')
+	def mixinSrc = rootProject.file('src/main/resources/anilink.mixins.json')
+	def stage = layout.buildDirectory.dir('forge-extra')
+	def prepareForge = tasks.register('prepareForgeExtras') {
+		def toml = rootProject.file('forge/common/resources/META-INF')
+		inputs.file(mixinSrc)
+		inputs.dir(toml)
+		outputs.dir(stage)
+		doLast {
+			def out = stage.get().asFile
+			project.delete(out)
+			new File(out, 'META-INF').mkdirs()
+			new File(out, 'anilink.mixins.json').text = mixinSrc.text.replace('  "refmap": "anilink-refmap.json",\n', '')
+			def mixins = '\n[[mixins]]\nconfig="anilink.mixins.json"\n'
+			new File(out, 'META-INF/mods.toml').text = new File(toml, 'mods.toml').text + mixins
+			new File(out, 'META-INF/neoforge.mods.toml').text = new File(toml, 'neoforge.mods.toml').text + mixins
+		}
+	}
+	tasks.register('forgeJar', Jar) {
+		dependsOn prepareForge, tasks.named('jar')
+		archiveFileName = "anilink-forge-${mc}.jar"
+		destinationDirectory = layout.buildDirectory.dir('forge')
+		duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+		manifest { attributes('MixinConfigs': 'anilink.mixins.json') }
+		// our toml files first so the universal jar's copies are skipped
+		from(stage)
+		from(zipTree(universal)) { exclude 'META-INF/MANIFEST.MF' }
+		from(tasks.named('jar').map { zipTree(it.archiveFile) }) {
+			include 'dev/anidius/anilink/ui/**', 'dev/anidius/anilink/mixin/**'
+		}
+	}
+	def collectForge = tasks.register('collectForgeJar', Copy) {
+		from(tasks.named('forgeJar'))
+		into(rootProject.file('../src-tauri/companion'))
+	}
+	tasks.named('collectJar') { dependsOn collectForge }
 }

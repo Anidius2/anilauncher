@@ -72,7 +72,7 @@ pub fn option_lines(d: &Value) -> BTreeMap<String, String> {
 
 /// The game's data version, read from the client jar on the classpath, so the game reads our options.txt
 /// as current and doesn't try to "upgrade" it.
-fn data_version(classpath: &[PathBuf]) -> Option<i64> {
+pub(crate) fn data_version(classpath: &[PathBuf]) -> Option<i64> {
     for jar in classpath.iter().filter(|p| p.to_string_lossy().contains("versions")) {
         let Ok(f) = std::fs::File::open(jar) else { continue };
         let Ok(mut z) = zip::ZipArchive::new(f) else { continue };
@@ -87,7 +87,7 @@ fn data_version(classpath: &[PathBuf]) -> Option<i64> {
     None
 }
 
-fn read_options(path: &Path) -> Vec<(String, String)> {
+pub(crate) fn read_options(path: &Path) -> Vec<(String, String)> {
     std::fs::read_to_string(path)
         .unwrap_or_default()
         .lines()
@@ -95,7 +95,7 @@ fn read_options(path: &Path) -> Vec<(String, String)> {
         .collect()
 }
 
-fn write_options(path: &Path, lines: &[(String, String)]) -> Res<()> {
+pub(crate) fn write_options(path: &Path, lines: &[(String, String)]) -> Res<()> {
     let text: String = lines.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
     std::fs::write(path, text).ctx("Не удалось записать настройки игры")
 }
