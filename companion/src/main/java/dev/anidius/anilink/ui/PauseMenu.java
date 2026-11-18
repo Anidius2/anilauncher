@@ -6,6 +6,11 @@ import net.minecraft.client.gui.screens.achievement.StatsScreen;
 import net.minecraft.client.gui.screens.advancements.AdvancementsScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.components.AbstractButton;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.network.chat.contents.TranslatableContents;
+import java.util.ArrayList;
+import java.util.List;
 //? if >=1.21.6 {
 import net.minecraft.client.multiplayer.ClientLevel;
 //?} else {
@@ -53,11 +58,82 @@ public final class PauseMenu extends BaseScreen {
 			button(Component.literal(ru ? "Открыть для друзей" : "Open to friends"), x, y, COL_W, h, () -> openLan(mc));
 			y += h + gap;
 		}
-		button(Component.literal(ru ? "Обычное меню" : "Classic menu"), x, y, COL_W, h, () -> Nav.openClassic(new PauseScreen(true)));
-		y += h + gap + 4;
+		// buttons other mods put into the game's pause menu. Wide ones: one per row, or two per row when
+		// there are several. Icons: beside "Classic menu" (up to three), the rest in rows under it.
+		List<AbstractWidget> wide = new ArrayList<>(), icons = new ArrayList<>();
+		modButtons(mc, wide, icons);
+		int pairW = (COL_W - gap) / 2;
+		for (int i = 0; i < wide.size(); i++) {
+			boolean pairs = wide.size() > 1;
+			boolean right = pairs && i % 2 == 1;
+			boolean lastAlone = pairs && i == wide.size() - 1 && i % 2 == 0;
+			int w = !pairs || lastAlone ? COL_W : pairW;
+			place(wide.get(i), right ? x + pairW + gap : x, y, w);
+			if (!pairs || right || lastAlone) y += h + gap;
+		}
+		int beside = 0, besideW = 0;
+		while (beside < icons.size() && beside < 3) besideW += icons.get(beside++).getWidth() + gap;
+		button(Component.literal(ru ? "Обычное меню" : "Classic menu"), x, y, COL_W - besideW, h, () -> Nav.openClassic(new PauseScreen(true)));
+		int ix = x + COL_W - besideW + gap;
+		for (int i = 0; i < beside; i++) {
+			AbstractWidget b = icons.get(i);
+			place(b, ix, y + (h - b.getHeight()) / 2, b.getWidth());
+			ix += b.getWidth() + gap;
+		}
+		y += h + gap;
+		ix = x;
+		for (int i = beside; i < icons.size(); i++) {
+			AbstractWidget b = icons.get(i);
+			if (ix + b.getWidth() > x + COL_W) {
+				ix = x;
+				y += h + gap;
+			}
+			place(b, ix, y + (h - b.getHeight()) / 2, b.getWidth());
+			ix += b.getWidth() + gap;
+		}
+		if (beside < icons.size()) y += h + gap;
+		y += 4;
 		Component leave = mc.isLocalServer() ? Component.translatable("menu.returnToMenu") : Component.translatable("menu.disconnect");
 		button(leave, x, y, COL_W, h, () -> leave(mc));
 		bottom = y + h;
+	}
+
+	private void place(AbstractWidget b, int x, int y, int w) {
+		b.setX(x);
+		b.setY(y);
+		b.setWidth(w);
+		addRenderableWidget(b);
+	}
+
+	/**
+	 * Buttons other mods (Figura, voice chat, replay...) put into the game's own pause menu: the game's menu is
+	 * built off screen so the mods add their buttons as usual, then those buttons move here. They still work
+	 * as before: whatever they open comes back to the pause menu, which is this one again.
+	 */
+	private void modButtons(Minecraft mc, List<AbstractWidget> wide, List<AbstractWidget> icons) {
+		try {
+			PauseScreen vanilla = new PauseScreen(true);
+			//? if >=1.21.11 {
+			vanilla.init(width, height);
+			//?} else {
+			/*vanilla.init(mc, width, height);
+			*///?}
+			for (var child : vanilla.children()) {
+				if (!(child instanceof AbstractButton b) || !b.visible || isVanilla(b)) continue;
+				(b.getWidth() <= 24 ? icons : wide).add(b);
+			}
+		} catch (Throwable ignored) {
+			// a mod's button that can't be moved stays in the classic menu
+		}
+	}
+
+	/** The game's own buttons (and Mod Menu's, which this menu already has): their texts all come from these keys. */
+	private static boolean isVanilla(AbstractWidget b) {
+		if (b.getMessage().getContents() instanceof TranslatableContents t) {
+			String k = t.getKey();
+			return k.startsWith("menu.") || k.startsWith("gui.") || k.startsWith("modmenu") || k.startsWith("fml.menu");
+		}
+		return false;
 	}
 
 	private void openLan(Minecraft mc) {
