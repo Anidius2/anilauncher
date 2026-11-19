@@ -392,7 +392,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .select-small { height: 34px !important; max-width: 160px; font-size: 12px; }
 .more-btn { align-self: center; }
 .update-list { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--accent-hi); background: var(--side); }
-.update-row { display: flex; justify-content: space-between; gap: 12px; }
+.update-item { display: flex; flex-direction: column; gap: 6px; }
+.update-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-width: 0; }
+.update-row__end { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.update-notes { max-height: 180px; overflow: auto; white-space: pre-wrap; font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: var(--card); color: var(--muted); }
+.chip--pin { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 4px 9px; font-size: 12px; border-color: var(--accent-hi); }
 .content-list { display: flex; flex-direction: column; gap: 8px; }
 .content-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--side); transition: opacity .2s, border-color .2s; }
 .content-row:hover { border-color: var(--accent-hi); }

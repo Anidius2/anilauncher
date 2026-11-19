@@ -50,12 +50,38 @@ pub struct Entry {
     pub icon: Option<String>,
     #[serde(default)]
     pub sha1: Option<String>,
+    /// Rolled back on purpose: updates (manual "update all" and auto-update) leave it alone.
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+/// A file an update replaced, kept so that one mod can go back without restoring the whole build.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Replaced {
+    /// What the file was (filename, version, project...).
+    pub entry: Entry,
+    /// The file that took its place.
+    pub replaced_by: String,
+    /// Name of the copy in the history folder.
+    pub stored: String,
+    pub date: u64,
 }
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Meta {
     pub entries: Vec<Entry>,
+    #[serde(default)]
+    pub history: Vec<Replaced>,
 }
+
+/// Previous versions of replaced files live next to the build, outside the game folder (the game never loads them).
+fn history_dir(state: &AppState, id: &str) -> PathBuf {
+    instances::dir(state, id).join("content-history")
+}
+
+/// How many old versions of one project are kept.
+const KEEP_OLD: usize = 3;
 
 fn meta_path(state: &AppState, id: &str) -> PathBuf {
     instances::dir(state, id).join("content.json")
@@ -323,6 +349,7 @@ async fn install_version(state: &AppState, id: &str, kind: &str, version: &Value
             .as_ref()
             .and_then(|i| i.get("icon_url").and_then(|v| v.as_str()).map(String::from)),
         sha1,
+        pinned: false,
     };
     meta.entries.retain(|e| !(e.kind == kind && (e.filename == filename || e.project_id.as_deref() == Some(project_id.as_str()))));
     meta.entries.push(entry.clone());
@@ -436,6 +463,9 @@ pub struct Installed {
     version_number: Option<String>,
     icon: Option<String>,
     size: u64,
+    /// Version an update replaced, if it can be brought back.
+    previous: Option<String>,
+    pinned: bool,
 }
 
 /// Files in the build's folder, enriched with Modrinth info (looked up by hash for unknown files).
@@ -489,6 +519,7 @@ pub async fn list_content(state: State<'_, AppState>, instance_id: String, kind:
                         title: None,
                         icon: None,
                         sha1: Some(hash.clone()),
+                        pinned: false,
                     });
                 } else {
                     meta.entries.push(Entry {
@@ -525,6 +556,8 @@ pub async fn list_content(state: State<'_, AppState>, instance_id: String, kind:
                 version_number: e.and_then(|e| e.version_number.clone()),
                 icon: e.and_then(|e| e.icon.clone()),
                 size: std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0),
+                previous: last_replaced(&meta, &kind, &base).map(|h| h.entry.version_number.clone().unwrap_or_else(|| h.entry.filename.clone())),
+                pinned: e.map(|e| e.pinned).unwrap_or(false),
                 filename: base,
                 enabled,
             }
@@ -575,6 +608,8 @@ pub struct Update {
     from: String,
     to: String,
     version_id: String,
+    /// What changed, as the author wrote it on Modrinth (empty when there is nothing).
+    changelog: String,
 }
 
 pub async fn find_updates(state: &AppState, instance_id: &str) -> Res<Vec<Update>> {
@@ -586,12 +621,12 @@ pub async fn find_updates(state: &AppState, instance_id: &str) -> Res<Vec<Update
         let entries: Vec<&Entry> = meta
             .entries
             .iter()
-            .filter(|e| e.kind == kind && e.project_id.is_some() && dir.join(&e.filename).exists())
+            .filter(|e| e.kind == kind && !e.pinned && e.project_id.is_some() && dir.join(&e.filename).exists())
             .filter(|e| !e.project_id.as_deref().unwrap_or("").starts_with(crate::own::PREFIX))
             .collect();
         if kind == "mod" {
             // own mods: a newer file in the catalog
-            for e in meta.entries.iter().filter(|e| e.project_id.as_deref().unwrap_or("").starts_with(crate::own::PREFIX) && dir.join(&e.filename).exists()) {
+            for e in meta.entries.iter().filter(|e| !e.pinned && e.project_id.as_deref().unwrap_or("").starts_with(crate::own::PREFIX) && dir.join(&e.filename).exists()) {
                 let project = e.project_id.clone().unwrap_or_default();
                 if let Some(m) = crate::own::find(state, &project).await {
                     if let Some(v) = crate::own::best(&m, &inst.mc_version, &inst.loader) {
@@ -604,6 +639,7 @@ pub async fn find_updates(state: &AppState, instance_id: &str) -> Res<Vec<Update
                                 from: cur,
                                 to: v.version.clone(),
                                 version_id: format!("{project}@{}", v.version),
+                                changelog: String::new(),
                             });
                         }
                     }
@@ -643,6 +679,7 @@ pub async fn find_updates(state: &AppState, instance_id: &str) -> Res<Vec<Update
                         from: e.version_number.clone().unwrap_or_default(),
                         to: s(v, "version_number"),
                         version_id: new_id,
+                        changelog: s(v, "changelog").chars().take(4000).collect(),
                     });
                 }
             }
@@ -667,6 +704,8 @@ pub async fn apply_updates_inner(state: &AppState, instance_id: &str, only: &[St
     for u in updates.iter().filter(|u| only.is_empty() || only.contains(&u.filename)) {
         let dir = instances::game_dir(state, instance_id).join(folder(&u.kind)?);
         let was_disabled = dir.join(format!("{}.disabled", u.filename)).exists();
+        let old = meta.entries.iter().find(|e| e.kind == u.kind && e.filename == u.filename).cloned();
+        let kept = keep_old(state, instance_id, &dir, &u.filename, was_disabled);
         let entry = if u.version_id.starts_with(crate::own::PREFIX) {
             let (project, ver) = u.version_id.split_once('@').unwrap_or((&u.version_id, ""));
             crate::own::install(state, instance_id, project, Some(ver), &mut meta).await?.0
@@ -681,10 +720,101 @@ pub async fn apply_updates_inner(state: &AppState, instance_id: &str, only: &[St
         if was_disabled {
             let _ = std::fs::rename(dir.join(&entry.filename), dir.join(format!("{}.disabled", entry.filename)));
         }
+        if let (Some(old), Some(stored)) = (old, kept) {
+            remember(state, instance_id, &mut meta, old, &entry.filename, stored);
+        }
         n += 1;
     }
     save_meta(state, instance_id, &meta)?;
     Ok(n)
+}
+
+/// Copies a file that is about to be replaced into the history folder. None if there was nothing to keep.
+fn keep_old(state: &AppState, id: &str, dir: &Path, filename: &str, disabled: bool) -> Option<String> {
+    let src = if disabled { dir.join(format!("{filename}.disabled")) } else { dir.join(filename) };
+    if !src.is_file() {
+        return None;
+    }
+    let hist = history_dir(state, id);
+    std::fs::create_dir_all(&hist).ok()?;
+    let stored = format!("{}-{filename}", crate::util::now());
+    std::fs::copy(&src, hist.join(&stored)).ok()?;
+    Some(stored)
+}
+
+/// Records a replaced file and drops the oldest copies of the same project beyond KEEP_OLD.
+fn remember(state: &AppState, id: &str, meta: &mut Meta, old: Entry, new_file: &str, stored: String) {
+    // the new file takes over the old one's history, so it can be stepped back more than once
+    for h in meta.history.iter_mut().filter(|h| h.entry.kind == old.kind && h.replaced_by == old.filename) {
+        h.replaced_by = new_file.to_string();
+    }
+    meta.history.push(Replaced { entry: Entry { pinned: false, ..old }, replaced_by: new_file.to_string(), stored, date: crate::util::now() });
+    let same = |h: &Replaced, n: &str| h.replaced_by == n;
+    let mut mine: Vec<usize> = (0..meta.history.len()).filter(|&i| same(&meta.history[i], new_file)).collect();
+    mine.sort_by_key(|&i| std::cmp::Reverse(meta.history[i].date));
+    let drop: HashSet<usize> = mine.into_iter().skip(KEEP_OLD).collect();
+    let hist = history_dir(state, id);
+    let mut i = 0;
+    meta.history.retain(|h| {
+        let gone = drop.contains(&i);
+        i += 1;
+        if gone {
+            let _ = std::fs::remove_file(hist.join(&h.stored));
+        }
+        !gone
+    });
+}
+
+/// The newest version an update replaced with this file.
+fn last_replaced<'a>(meta: &'a Meta, kind: &str, filename: &str) -> Option<&'a Replaced> {
+    meta.history.iter().filter(|h| h.entry.kind == kind && h.replaced_by == filename).max_by_key(|h| h.date)
+}
+
+/// Puts back the version an update replaced. The mod is pinned so updates don't bring the new one straight back.
+#[tauri::command]
+pub async fn rollback_content(state: State<'_, AppState>, instance_id: String, kind: String, filename: String) -> Res<String> {
+    safe_name(&filename)?;
+    let mut meta = load_meta(&state, &instance_id);
+    let h = last_replaced(&meta, &kind, &filename).cloned().ok_or("Прошлой версии нет")?;
+    let dir = instances::game_dir(&state, &instance_id).join(folder(&kind)?);
+    let src = history_dir(&state, &instance_id).join(&h.stored);
+    if !src.is_file() {
+        meta.history.retain(|x| x.stored != h.stored);
+        let _ = save_meta(&state, &instance_id, &meta);
+        return Err("Файл прошлой версии потерян".into());
+    }
+    crate::snapshots::auto(&state, &instance_id, "update", "");
+    let disabled = dir.join(format!("{filename}.disabled")).exists();
+    let back = if disabled { format!("{}.disabled", h.entry.filename) } else { h.entry.filename.clone() };
+    std::fs::copy(&src, dir.join(&back)).ctx("Не удалось вернуть файл")?;
+    if h.entry.filename != filename {
+        let _ = std::fs::remove_file(dir.join(&filename));
+        let _ = std::fs::remove_file(dir.join(format!("{filename}.disabled")));
+    }
+    let _ = std::fs::remove_file(&src);
+    meta.history.retain(|x| x.stored != h.stored);
+    // older copies now belong to the restored file
+    for x in meta.history.iter_mut().filter(|x| x.entry.kind == kind && x.replaced_by == filename) {
+        x.replaced_by = h.entry.filename.clone();
+    }
+    let project = h.entry.project_id.clone();
+    meta.entries.retain(|e| !(e.kind == kind && (e.filename == filename || e.filename == h.entry.filename || (project.is_some() && e.project_id == project))));
+    let version = h.entry.version_number.clone().unwrap_or_else(|| h.entry.filename.clone());
+    meta.entries.push(Entry { pinned: true, ..h.entry });
+    save_meta(&state, &instance_id, &meta)?;
+    Ok(version)
+}
+
+/// Lets updates touch a rolled-back mod again (or keeps them away from any mod).
+#[tauri::command(async)]
+pub fn pin_content(state: State<'_, AppState>, instance_id: String, kind: String, filename: String, pinned: bool) -> Res<()> {
+    safe_name(&filename)?;
+    let mut meta = load_meta(&state, &instance_id);
+    match meta.entries.iter_mut().find(|e| e.kind == kind && e.filename == filename) {
+        Some(e) => e.pinned = pinned,
+        None => meta.entries.push(Entry { filename, kind, pinned, ..Default::default() }),
+    }
+    save_meta(&state, &instance_id, &meta)
 }
 
 #[tauri::command]
@@ -764,4 +894,108 @@ pub async fn optimize_instance(state: State<'_, AppState>, instance_id: String) 
         result.skipped.push(title);
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod rollback_tests {
+    use super::*;
+    use tauri::Manager;
+
+    /// What apply_updates does to one file, without the download.
+    fn fake_update(st: &AppState, dir: &Path, meta: &mut Meta, from: &str, to: &str, ver: &str) {
+        let disabled = dir.join(format!("{from}.disabled")).exists();
+        let old = meta.entries.iter().find(|e| e.filename == from).cloned().unwrap();
+        let kept = keep_old(st, "b", dir, from, disabled);
+        std::fs::write(dir.join(to), ver).unwrap();
+        let _ = std::fs::remove_file(dir.join(from));
+        let _ = std::fs::remove_file(dir.join(format!("{from}.disabled")));
+        if disabled {
+            std::fs::rename(dir.join(to), dir.join(format!("{to}.disabled"))).unwrap();
+        }
+        meta.entries.retain(|e| e.filename != from);
+        meta.entries.push(Entry { filename: to.into(), kind: "mod".into(), project_id: Some("sodium".into()), version_number: Some(ver.into()), ..Default::default() });
+        remember(st, "b", meta, old, to, kept.unwrap());
+    }
+
+    #[test]
+    fn one_mod_steps_back_and_stays_put() {
+        let root = std::env::temp_dir().join(format!("anilauncher-rollback-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let app = tauri::test::mock_app();
+        app.manage(AppState::with_root(root.clone()));
+        let st = app.state::<AppState>();
+        let inst = instances::Instance { id: "b".into(), name: "B".into(), mc_version: "1.21.11".into(), loader: "fabric".into(), ..Default::default() };
+        instances::store(&st, &inst).unwrap();
+        let dir = instances::game_dir(&st, "b").join("mods");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("sodium-1.jar"), "1").unwrap();
+        let mut meta = Meta::default();
+        meta.entries.push(Entry { filename: "sodium-1.jar".into(), kind: "mod".into(), project_id: Some("sodium".into()), version_number: Some("1".into()), ..Default::default() });
+
+        fake_update(&st, &dir, &mut meta, "sodium-1.jar", "sodium-2.jar", "2");
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        fake_update(&st, &dir, &mut meta, "sodium-2.jar", "sodium-3.jar", "3");
+        save_meta(&st, "b", &meta).unwrap();
+
+        let list = tauri::async_runtime::block_on(list_content(st.clone(), "b".into(), "mod".into())).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].previous.as_deref(), Some("2"));
+
+        // back to 2: file restored, 3 gone, pinned, and 1 is still one step further back
+        let v = tauri::async_runtime::block_on(rollback_content(st.clone(), "b".into(), "mod".into(), "sodium-3.jar".into())).unwrap();
+        assert_eq!(v, "2");
+        assert_eq!(std::fs::read_to_string(dir.join("sodium-2.jar")).unwrap(), "2");
+        assert!(!dir.join("sodium-3.jar").exists());
+        let list = tauri::async_runtime::block_on(list_content(st.clone(), "b".into(), "mod".into())).unwrap();
+        assert!(list[0].pinned);
+        assert_eq!(list[0].previous.as_deref(), Some("1"));
+
+        // back to 1
+        tauri::async_runtime::block_on(rollback_content(st.clone(), "b".into(), "mod".into(), "sodium-2.jar".into())).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("sodium-1.jar")).unwrap(), "1");
+        let names: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().into_string().unwrap()).collect();
+        assert_eq!(names, vec!["sodium-1.jar".to_string()]);
+        let list = tauri::async_runtime::block_on(list_content(st.clone(), "b".into(), "mod".into())).unwrap();
+        assert_eq!(list[0].previous, None);
+        assert!(list[0].pinned);
+        assert!(std::fs::read_dir(history_dir(&st, "b")).unwrap().next().is_none(), "history copies are cleaned up");
+
+        // unpin
+        pin_content(st.clone(), "b".into(), "mod".into(), "sodium-1.jar".into(), false).unwrap();
+        assert!(!load_meta(&st, "b").entries[0].pinned);
+
+        // a disabled mod stays disabled through an update and a rollback
+        let mut meta = load_meta(&st, "b");
+        std::fs::rename(dir.join("sodium-1.jar"), dir.join("sodium-1.jar.disabled")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        fake_update(&st, &dir, &mut meta, "sodium-1.jar", "sodium-2.jar", "2");
+        save_meta(&st, "b", &meta).unwrap();
+        assert!(dir.join("sodium-2.jar.disabled").exists());
+        tauri::async_runtime::block_on(rollback_content(st.clone(), "b".into(), "mod".into(), "sodium-2.jar".into())).unwrap();
+        assert!(dir.join("sodium-1.jar.disabled").exists());
+        assert!(!dir.join("sodium-2.jar.disabled").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn only_three_old_versions_are_kept() {
+        let root = std::env::temp_dir().join(format!("anilauncher-rollback3-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let app = tauri::test::mock_app();
+        app.manage(AppState::with_root(root.clone()));
+        let st = app.state::<AppState>();
+        instances::store(&st, &instances::Instance { id: "b".into(), name: "B".into(), ..Default::default() }).unwrap();
+        let dir = instances::game_dir(&st, "b").join("mods");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("m-1.jar"), "1").unwrap();
+        let mut meta = Meta::default();
+        meta.entries.push(Entry { filename: "m-1.jar".into(), kind: "mod".into(), project_id: Some("sodium".into()), ..Default::default() });
+        for i in 1..=5 {
+            std::thread::sleep(std::time::Duration::from_millis(1100));
+            fake_update(&st, &dir, &mut meta, &format!("m-{i}.jar"), &format!("m-{}.jar", i + 1), &format!("{}", i + 1));
+        }
+        assert_eq!(meta.history.len(), 3);
+        assert_eq!(std::fs::read_dir(history_dir(&st, "b")).unwrap().count(), 3);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

@@ -168,6 +168,7 @@ pub async fn install(state: &AppState, instance_id: &str, project: &str, version
         title: Some(m.name.clone()),
         icon: icon_url(&m),
         sha1: Some(v.sha1.clone()).filter(|s| !s.is_empty()),
+        pinned: false,
     };
     meta.entries.retain(|e| !(e.kind == "mod" && (e.filename == entry.filename || e.project_id.as_deref() == Some(project))));
     meta.entries.push(entry.clone());

@@ -112,6 +112,8 @@ pub fn run() {
             content::remove_content,
             content::check_updates,
             content::apply_updates,
+            content::rollback_content,
+            content::pin_content,
             packs::import_pack,
             packs::export_pack,
             packs::install_modpack,
@@ -395,6 +397,16 @@ mod live_tests {
         println!("applied {n}");
         let ups2 = content::check_updates(app.state(), "t1".into()).await.unwrap();
         println!("updates after: {}", ups2.len());
+        // one mod steps back; it is pinned, so it no longer shows up as an update
+        let list = content::list_content(app.state(), "t1".into(), "mod".into()).await.unwrap();
+        let sod = list.iter().find(|c| serde_json::to_value(c).unwrap()["previous"].is_string()).expect("updated mod remembers its previous version");
+        let sod = serde_json::to_value(sod).unwrap();
+        println!("previous: {} {}", sod["filename"], sod["previous"]);
+        let back = content::rollback_content(app.state(), "t1".into(), "mod".into(), sod["filename"].as_str().unwrap().into()).await.unwrap();
+        println!("rolled back to {back}");
+        let ups3 = content::check_updates(app.state(), "t1".into()).await.unwrap();
+        assert!(ups3.is_empty(), "a rolled-back mod is not offered again");
+        assert!(serde_json::to_string(&ups).unwrap().contains("\"changelog\":\""));
         let dest = root.join("export.mrpack");
         packs::export_pack(app.state(), "t1".into(), dest.to_string_lossy().into()).await.unwrap();
         println!("exported {} bytes", std::fs::metadata(&dest).unwrap().len());

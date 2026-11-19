@@ -111,6 +111,10 @@ export interface InstalledContent {
   versionNumber?: string | null;
   icon?: string | null;
   size: number;
+  /** Version an update replaced: it can be brought back. */
+  previous?: string | null;
+  /** Rolled back on purpose: updates leave it alone. */
+  pinned: boolean;
 }
 
 export interface ContentVersion {
@@ -130,6 +134,7 @@ export interface ContentUpdate {
   from: string;
   to: string;
   versionId: string;
+  changelog: string;
 }
 
 export interface Shot {
@@ -546,6 +551,9 @@ export const api = {
     invoke<void>("remove_content", { instanceId, kind, filename }),
   checkUpdates: (instanceId: string) => invoke<ContentUpdate[]>("check_updates", { instanceId }),
   applyUpdates: (instanceId: string, only: string[]) => invoke<number>("apply_updates", { instanceId, only }),
+  rollbackContent: (instanceId: string, kind: ContentKind, filename: string) => invoke<string>("rollback_content", { instanceId, kind, filename }),
+  pinContent: (instanceId: string, kind: ContentKind, filename: string, pinned: boolean) =>
+    invoke<void>("pin_content", { instanceId, kind, filename, pinned }),
 
   importPack: (path: string) => invoke<Instance>("import_pack", { path }),
   installModpack: (projectId: string, versionId?: string | null) => invoke<Instance>("install_modpack", { projectId, versionId }),

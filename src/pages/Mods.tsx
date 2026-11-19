@@ -127,6 +127,7 @@ export function Mods() {
   const [searching, setSearching] = useState(false);
   const [creatingBuild, setCreatingBuild] = useState(false);
   const [updates, setUpdates] = useState<ContentUpdate[] | null>(null);
+  const [openNotes, setOpenNotes] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
 
@@ -339,11 +340,41 @@ export function Mods() {
           {updates && updates.length > 0 && (
             <div className="update-list">
               {updates.map((u) => (
-                <div key={u.filename} className="update-row">
-                  <strong>{u.title}</strong>
-                  <span className="muted small">
-                    {u.from} → {u.to}
-                  </span>
+                <div key={u.filename} className="update-item">
+                  <div className="update-row">
+                    <strong className="ellipsis">{u.title}</strong>
+                    <span className="update-row__end">
+                      <span className="muted small">
+                        {u.from} → {u.to}
+                      </span>
+                      {u.changelog.trim() && (
+                        <button className="btn btn--small" aria-expanded={openNotes === u.filename} onClick={() => setOpenNotes(openNotes === u.filename ? null : u.filename)}>
+                          {t("mods.whatsNew")}
+                        </button>
+                      )}
+                      <button
+                        className="btn btn--small"
+                        disabled={updating}
+                        onClick={async () => {
+                          setUpdating(true);
+                          try {
+                            await api.applyUpdates(inst.id, [u.filename]);
+                            sfx.success();
+                            toast(t("mods.updatedOne", { name: u.title, v: u.to }), "ok");
+                            setUpdates((list) => (list ?? []).filter((x) => x.filename !== u.filename));
+                            await loadInstalled();
+                          } catch (e) {
+                            toast(errText(e), "error");
+                          } finally {
+                            setUpdating(false);
+                          }
+                        }}
+                      >
+                        {t("mods.updateOne")}
+                      </button>
+                    </span>
+                  </div>
+                  {openNotes === u.filename && <div className="update-notes">{u.changelog}</div>}
                 </div>
               ))}
             </div>
@@ -367,6 +398,43 @@ export function Mods() {
                     {c.filename}
                   </span>
                 </span>
+                {c.pinned && (
+                  <button
+                    className="chip chip--pin"
+                    title={t("mods.pinnedHint")}
+                    onClick={async () => {
+                      try {
+                        await api.pinContent(inst.id, kind, c.filename, false);
+                        toast(t("mods.unpinned", { name: c.title }), "ok");
+                        await loadInstalled();
+                      } catch (e) {
+                        toast(errText(e), "error");
+                      }
+                    }}
+                  >
+                    <Icon name="pin" size={14} /> {t("mods.pinned")}
+                  </button>
+                )}
+                {c.previous && (
+                  <button
+                    className="icon-btn"
+                    aria-label={t("mods.rollback", { v: c.previous })}
+                    title={t("mods.rollback", { v: c.previous })}
+                    onClick={async () => {
+                      try {
+                        const v = await api.rollbackContent(inst.id, kind, c.filename);
+                        sfx.success();
+                        toast(t("mods.rolledBack", { name: c.title, v }), "ok");
+                        setUpdates((list) => (list ?? []).filter((x) => x.filename !== c.filename));
+                        await loadInstalled();
+                      } catch (e) {
+                        toast(errText(e), "error");
+                      }
+                    }}
+                  >
+                    <Icon name="undo" size={18} />
+                  </button>
+                )}
                 <Toggle
                   on={c.enabled}
                   label={c.title}

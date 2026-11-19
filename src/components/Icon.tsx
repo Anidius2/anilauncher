@@ -76,6 +76,12 @@ const paths: Record<string, JSX.Element> = {
   eraser: <path d="M8 20h12M5 15l8-8 6 6-6 6H9z" />,
   bucket: <path d="M5 11l7-7 7 7-7 7zM19 15c0 2 1 3 1 4a1 1 0 0 1-2 0c0-1 1-2 1-4z" />,
   picker: <path d="M14 4l6 6-2 2-6-6zM12 8l-8 8v4h4l8-8" />,
+  pin: (
+    <>
+      <path d="M9 3h6l-1 6 4 4v2H6v-2l4-4z" />
+      <path d="M12 15v6" />
+    </>
+  ),
   undo: <path d="M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-2" />,
   redo: <path d="M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h2" />,
   grid: <path d="M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16" />,
