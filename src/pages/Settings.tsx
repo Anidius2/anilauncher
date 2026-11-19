@@ -666,6 +666,10 @@ export function SettingsPage() {
                   <Toggle on={ui.consoleOnLaunch} onChange={(v) => setUi({ consoleOnLaunch: v })} label="console" />
                 </div>
                 <div className="setting">
+                  <span>{L("Копировать скриншоты (F2) в буфер обмена", "Copy screenshots (F2) to the clipboard")}</span>
+                  <Toggle on={settings.copyScreenshots !== false} onChange={(v) => updateSettings({ copyScreenshots: v })} label="copy screenshots" />
+                </div>
+                <div className="setting">
                   <span>{t("mods.autoUpdate")}</span>
                   <Toggle on={settings.autoUpdateMods} onChange={(v) => updateSettings({ autoUpdateMods: v })} label={t("mods.autoUpdate")} />
                 </div>

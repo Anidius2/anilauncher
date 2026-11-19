@@ -299,6 +299,9 @@ pub async fn launch_instance<R: Runtime>(
     let _ = instances::store(&state, &inst);
     let _ = app.emit("game-started", json!({"instanceId": id, "mc": p.mc}));
     window_on_start(&app, &state);
+    if state.settings().get("copyScreenshots").and_then(|v| v.as_bool()).unwrap_or(true) {
+        crate::media::watch_screenshots(app.clone(), id.clone(), instances::game_dir(&state, &id).join("screenshots"));
+    }
 
     // Game output → log file + live console (sent in small batches)
     let (tx, rx) = std::sync::mpsc::channel::<String>();

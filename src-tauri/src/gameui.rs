@@ -380,7 +380,11 @@ mod live {
         let mc = std::env::var("TEST_MC").unwrap_or_else(|_| "1.21.11".into());
         let wait: u64 = std::env::var("TEST_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(80);
         let root = std::env::temp_dir().join("anilauncher-test");
-        let app = tauri::test::mock_app();
+        // like the real app: screenshots go to the clipboard while the game runs
+        let app = tauri::test::mock_builder()
+            .plugin(tauri_plugin_clipboard_manager::init())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
         app.manage(state::AppState::with_root(root.clone()));
         let st = app.state::<state::AppState>();
         let mut settings = st.settings();

@@ -424,6 +424,8 @@ export interface Settings {
   selectedInstance?: string | null;
   edition: "java" | "bedrock";
   autoUpdateMods: boolean;
+  /** F2 screenshots go to the clipboard while the game runs. */
+  copyScreenshots: boolean;
   customThemes: CustomTheme[];
   onLaunch: "keep" | "minimize" | "hide";
   background: Background;
@@ -473,6 +475,7 @@ export const defaultSettings: Settings = {
   selectedInstance: null,
   edition: "java",
   autoUpdateMods: false,
+  copyScreenshots: true,
   customThemes: [],
   onLaunch: "keep",
   background: { mode: "art", file: null, weather: "auto" },

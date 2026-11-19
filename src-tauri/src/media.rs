@@ -118,6 +118,59 @@ pub fn copy_image<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>, pat
     app.clipboard().write_image(&img).ctx("Не удалось скопировать")
 }
 
+/// While a game runs, every new screenshot (F2) goes straight to the clipboard, and the game says so.
+/// The game writes screenshots on a background thread, so a file is taken only once it stops growing.
+pub fn watch_screenshots<R: Runtime>(app: AppHandle<R>, instance: String, dir: PathBuf) {
+    std::thread::spawn(move || {
+        use tauri::{Emitter, Manager};
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        let pngs = |d: &Path| -> Vec<(String, u64)> {
+            std::fs::read_dir(d)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    let size = e.metadata().ok()?.len();
+                    name.to_lowercase().ends_with(".png").then_some((name, size))
+                })
+                .collect()
+        };
+        let mut seen: std::collections::HashSet<String> = pngs(&dir).into_iter().map(|(n, _)| n).collect();
+        let mut growing: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            let st = app.state::<AppState>();
+            if !st.running.lock().map(|r| r.contains_key(&instance)).unwrap_or(false) {
+                break;
+            }
+            for (name, size) in pngs(&dir) {
+                if seen.contains(&name) || size == 0 {
+                    continue;
+                }
+                if growing.get(&name) != Some(&size) {
+                    growing.insert(name, size); // still being written: look again next time
+                    continue;
+                }
+                growing.remove(&name);
+                seen.insert(name.clone());
+                let Ok(img) = tauri::image::Image::from_path(dir.join(&name)) else { continue };
+                if app.clipboard().write_image(&img).is_err() {
+                    continue;
+                }
+                let en = st.settings().get("lang").and_then(|v| v.as_str()) == Some("en");
+                let text = if en { "Screenshot copied to the clipboard" } else { "Скриншот скопирован в буфер обмена" };
+                let hub = st.link.clone();
+                let inst = instance.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = hub.send(&inst, serde_json::json!({"cmd": "toast", "title": "AniLauncher", "text": text})).await;
+                });
+                let _ = app.emit("screenshot-copied", serde_json::json!({"instanceId": instance, "file": name}));
+            }
+        }
+    });
+}
+
 /// Saves a copy of a launcher file to a place the user picked.
 #[tauri::command(async)]
 pub fn save_copy(state: State<'_, AppState>, path: String, dest: String) -> Res<()> {
