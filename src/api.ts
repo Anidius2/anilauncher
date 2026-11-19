@@ -452,7 +452,7 @@ export interface Settings {
   builtInClientId?: boolean;
 }
 
-/** How AniLauncher Link restyles the game (1.21+, Fabric and Quilt). Colours follow the launcher's theme. */
+/** How AniLauncher Link restyles the game (1.20+, every loader Link supports). Colours follow the launcher's theme. */
 export interface GameUiPrefs {
   menu: boolean;
   pause: boolean;

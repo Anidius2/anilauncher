@@ -125,6 +125,7 @@ pub async fn get_feed(state: State<'_, AppState>) -> Res<Feed> {
         }
     }
     feed.art = key_art(&state, &art_links).await;
+    spawn_wallpapers(&state);
     let _ = write_json(&cache, &feed);
     Ok(feed)
 }
@@ -193,6 +194,104 @@ async fn key_art(state: &AppState, links: &[String]) -> Vec<String> {
     out
 }
 
+/// Folder with Mojang's official wallpapers (big PNGs, up to 2560×1440) for the in-game menus.
+pub fn wallpaper_dir(root: &std::path::Path) -> std::path::PathBuf {
+    root.join("cache").join("wallpapers")
+}
+
+/// The newest drops' wallpapers. Each archive is ~16 MB, so it runs in the background, once a week,
+/// and keeps only the one picture we need from each.
+pub fn spawn_wallpapers(state: &AppState) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static BUSY: AtomicBool = AtomicBool::new(false);
+    let dir = wallpaper_dir(&state.root);
+    let stamp = dir.join("checked");
+    let fresh = std::fs::metadata(&stamp)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .is_some_and(|age| age < std::time::Duration::from_secs(7 * 24 * 3600));
+    if fresh || BUSY.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let http = state.http.clone();
+    tauri::async_runtime::spawn(async move {
+        let ok = fetch_wallpapers(&http, &dir).await.is_some();
+        if ok {
+            let _ = std::fs::write(&stamp, b"");
+        }
+        BUSY.store(false, Ordering::SeqCst);
+    });
+}
+
+const WALLPAPERS: usize = 6;
+
+async fn fetch_wallpapers(http: &reqwest::Client, dir: &std::path::Path) -> Option<()> {
+    let html = http.get("https://www.minecraft.net/en-us/collectibles").send().await.ok()?.error_for_status().ok()?.text().await.ok()?;
+    let re = regex::Regex::new(r"/content/dam/minecraftnet/games/minecraft/software/(wallpapers_[A-Za-z0-9_\-()]+\.zip)").ok()?;
+    let mut zips: Vec<String> = Vec::new();
+    for c in re.captures_iter(&html) {
+        let name = c[1].to_string();
+        // the game-update archives; the edition/bundle ones are logo packs
+        if (name.contains("_drop") || name.contains("_update")) && !zips.contains(&name) {
+            zips.push(name);
+        }
+    }
+    zips.truncate(WALLPAPERS);
+    if zips.is_empty() {
+        return None;
+    }
+    std::fs::create_dir_all(dir).ok()?;
+    let wanted: Vec<String> = zips.iter().map(|z| z.trim_end_matches(".zip").to_string() + ".png").collect();
+    for (zip, png) in zips.iter().zip(&wanted) {
+        let out = dir.join(png);
+        if out.exists() {
+            continue;
+        }
+        let url = format!("https://www.minecraft.net/content/dam/minecraftnet/games/minecraft/software/{zip}");
+        let job = async {
+            let bytes = http.get(&url).send().await.ok()?.error_for_status().ok()?.bytes().await.ok()?;
+            let picked = pick_wallpaper(&bytes)?;
+            let tmp = out.with_extension("part");
+            std::fs::write(&tmp, picked).ok()?;
+            std::fs::rename(&tmp, &out).ok()
+        };
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(180), job).await;
+    }
+    // drop wallpapers of drops that left the newest list
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let n = e.file_name().to_string_lossy().into_owned();
+        if n.ends_with(".png") && !wanted.contains(&n) {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+    Some(())
+}
+
+/// From a wallpaper archive: the widescreen PNG closest to 2560×1440 (never smaller than 1920).
+fn pick_wallpaper(bytes: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).ok()?;
+    let re = regex::Regex::new(r"(\d{3,4})x(\d{3,4})\.png$").ok()?;
+    let mut best: Option<(usize, u32)> = None;
+    for i in 0..zip.len() {
+        let name = zip.by_index(i).ok()?.name().to_lowercase();
+        let Some(c) = re.captures(&name) else { continue };
+        let (w, h): (u32, u32) = (c[1].parse().ok()?, c[2].parse().ok()?);
+        if w < 1920 || w * 9 < h * 15 || w > 2560 {
+            continue; // phone, square and odd sizes
+        }
+        if best.map_or(true, |(_, bw)| w > bw) {
+            best = Some((i, w));
+        }
+    }
+    let mut f = zip.by_index(best?.0).ok()?;
+    let mut out = Vec::new();
+    f.read_to_end(&mut out).ok()?;
+    let size = imagesize::blob_size(&out).ok()?;
+    (size.width >= 1920).then_some(out)
+}
+
 fn fxhash(s: &str) -> u64 {
     s.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
 }
@@ -211,6 +310,22 @@ fn og_image(html: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    #[ignore]
+    async fn official_wallpapers() {
+        let dir = std::path::PathBuf::from("/tmp/wallpapers-test");
+        let http = reqwest::Client::builder().user_agent("AniLauncher").build().unwrap();
+        super::fetch_wallpapers(&http, &dir).await.expect("wallpapers");
+        let mut n = 0;
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let s = imagesize::size(e.path()).unwrap();
+            println!("{} {}x{}", e.file_name().to_string_lossy(), s.width, s.height);
+            assert!(s.width >= 1920);
+            n += 1;
+        }
+        assert!(n >= 3);
+    }
+
     #[tokio::test]
     #[ignore]
     async fn real_feed_has_big_art() {

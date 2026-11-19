@@ -48,14 +48,21 @@ public abstract class BaseScreen extends Screen {
 	*///?} else {
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+		//? if <1.20.2 {
+		/*// 1.20.1: each screen draws its own background before the widgets
+		if (keepGameBackground()) renderBackground(graphics);
+		paint(new Gfx(graphics), mouseX, mouseY, delta);
+		*///?}
 		super.render(graphics, mouseX, mouseY, delta);
 		paintOver(new Gfx(graphics), mouseX, mouseY, delta);
 	}
 
+	//? if >=1.20.2 {
 	@Override
 	public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		if (keepGameBackground()) super.renderBackground(graphics, mouseX, mouseY, delta);
 		paint(new Gfx(graphics), mouseX, mouseY, delta);
 	}
+	//?}
 	//?}
 }

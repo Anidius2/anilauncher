@@ -3,7 +3,6 @@ package dev.anidius.anilink.ui;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.achievement.StatsScreen;
-import net.minecraft.client.gui.screens.advancements.AdvancementsScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.components.AbstractButton;
@@ -14,8 +13,7 @@ import java.util.List;
 //? if >=1.21.6 {
 import net.minecraft.client.multiplayer.ClientLevel;
 //?} else {
-/*import net.minecraft.client.gui.screens.GenericMessageScreen;
-import net.minecraft.client.gui.screens.TitleScreen;
+/*import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import com.mojang.realmsclient.RealmsMainScreen;
 *///?}
@@ -42,7 +40,7 @@ public final class PauseMenu extends BaseScreen {
 		y += h + gap + 4;
 		if (mc.player != null) {
 			button(Component.translatable("gui.advancements"), x, y, half, h,
-				() -> Nav.open(new AdvancementsScreen(mc.player.connection.getAdvancements(), this)));
+				() -> Nav.open(Nav.advancements(mc, this)));
 			button(Component.translatable("gui.stats"), x + half + gap, y, COL_W - half - gap, h,
 				() -> Nav.open(new StatsScreen(this, mc.player.getStats())));
 			y += h + gap;
@@ -156,11 +154,11 @@ public final class PauseMenu extends BaseScreen {
 		/*boolean local = mc.isLocalServer();
 		ServerData server = mc.getCurrentServer();
 		if (mc.level != null) mc.level.disconnect();
-		if (local) mc.disconnect(new GenericMessageScreen(Component.translatable("menu.savingLevel")));
-		else mc.disconnect();
+		boolean realm = Nav.wasRealm(mc, server);
+		Nav.dropWorld(local);
 		TitleScreen title = new TitleScreen();
 		if (local) mc.setScreen(title);
-		else if (server != null && server.isRealm()) mc.setScreen(new RealmsMainScreen(title));
+		else if (realm) mc.setScreen(new RealmsMainScreen(title));
 		else mc.setScreen(new JoinMultiplayerScreen(title));
 		*///?}
 	}

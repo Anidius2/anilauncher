@@ -86,14 +86,23 @@ async fn art_source(state: &AppState, inst: &Instance, dir: &Path) -> Option<Pat
             }
         }
     }
-    let mut heroes: Vec<PathBuf> = std::fs::read_dir(state.root.join("cache").join("hero"))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_file())
-        .collect();
-    heroes.sort();
+    let list = |dir: PathBuf, ext: &[&str]| -> Vec<PathBuf> {
+        let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file() && p.extension().is_some_and(|e| ext.iter().any(|x| e.eq_ignore_ascii_case(x))))
+            .collect();
+        v.sort();
+        v
+    };
+    // Mojang's full-size wallpapers first; the smaller article pictures until they are downloaded
+    crate::news::spawn_wallpapers(state);
+    let mut heroes = list(crate::news::wallpaper_dir(&state.root), &["png"]);
+    if heroes.is_empty() {
+        heroes = list(state.root.join("cache").join("hero"), &["png", "jpg", "jpeg"]);
+    }
     if heroes.is_empty() {
         return None;
     }
@@ -101,15 +110,16 @@ async fn art_source(state: &AppState, inst: &Instance, dir: &Path) -> Option<Pat
     Some(heroes[pick].clone())
 }
 
-/// Converts any picture to a PNG no bigger than 1920px (the game reads only PNG).
+/// Converts any picture to a PNG no bigger than 2560px (the game reads only PNG).
 fn to_png(src: &Path, out: &Path) -> Option<()> {
     let key = format!("{}:{}", src.display(), std::fs::metadata(src).ok()?.len());
     let key_file = out.with_extension("key");
     if out.exists() && std::fs::read_to_string(&key_file).ok().as_deref() == Some(key.as_str()) {
         return Some(());
     }
-    let img = image::open(src).ok()?;
-    let img = if img.width() > 1920 { img.resize(1920, 1920 * img.height() / img.width(), imageops::FilterType::Triangle) } else { img };
+    // by content, not by name: one of Mojang's ".png" wallpapers is really a JPEG
+    let img = image::ImageReader::open(src).ok()?.with_guessed_format().ok()?.decode().ok()?;
+    let img = if img.width() > 2560 { img.resize(2560, 2560 * img.height() / img.width(), imageops::FilterType::Lanczos3) } else { img };
     img.to_rgba8().save_with_format(out, ImageFormat::Png).ok()?;
     std::fs::write(key_file, key).ok()
 }
@@ -235,7 +245,30 @@ fn png_bytes(img: &RgbaImage) -> Vec<u8> {
 }
 
 /// Builds the pack for the current colours. Same colours give the same bytes, so nothing is rewritten.
+#[cfg(test)]
 fn pack_bytes(colors: &Value) -> Res<Vec<u8>> {
+    pack_bytes_for(colors, "1.21.11", &[])
+}
+
+fn mc_parts(mc: &str) -> (u32, u32, u32) {
+    let p: Vec<u32> = mc.split('.').map(|x| x.parse().unwrap_or(0)).collect();
+    (p.first().copied().unwrap_or(0), p.get(1).copied().unwrap_or(0), p.get(2).copied().unwrap_or(0))
+}
+
+/// A picture from the game jar on the classpath (for 1.20.1, whose buttons share one sheet with the hotbar).
+fn game_texture(classpath: &[PathBuf], name: &str) -> Option<RgbaImage> {
+    for jar in classpath {
+        let Ok(f) = std::fs::File::open(jar) else { continue };
+        let Ok(mut z) = zip::ZipArchive::new(f) else { continue };
+        let Ok(mut e) = z.by_name(name) else { continue };
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut e, &mut bytes).ok()?;
+        return image::load_from_memory(&bytes).ok().map(|i| i.to_rgba8());
+    }
+    None
+}
+
+fn pack_bytes_for(colors: &Value, mc: &str, classpath: &[PathBuf]) -> Res<Vec<u8>> {
     let panel = rgb(&hex(colors, "panel", "#2e2e2e"));
     let accent = rgb(&hex(colors, "accent", "#3c8527"));
     // the game always writes white text on buttons: keep them dark even with a light launcher theme
@@ -247,11 +280,47 @@ fn pack_bytes(colors: &Value) -> Res<Vec<u8>> {
 
     let nine = |w: u32, h: u32, border: u32| json!({"gui": {"scaling": {"type": "nine_slice", "width": w, "height": h, "border": border}}}).to_string();
     let mut files: Vec<(String, Vec<u8>)> = vec![
-        ("pack.mcmeta".into(), json!({"pack": {
-            "description": "AniLauncher: buttons in the launcher's colours",
-            "pack_format": 34, "supported_formats": [34, 999], "min_format": 34, "max_format": 999
-        }}).to_string().into_bytes()),
     ];
+    let v = mc_parts(mc);
+    // 1.20.x: the version's own pack number, or the game marks the pack as made for another version
+    let format = match v {
+        (1, 20, 0 | 1) => 15,
+        (1, 20, 2) => 18,
+        (1, 20, 3 | 4) => 22,
+        (1, 20, _) => 32,
+        _ => 34,
+    };
+    files.push(("pack.mcmeta".into(), json!({"pack": {
+        "description": "AniLauncher: buttons in the launcher's colours",
+        "pack_format": format, "supported_formats": [format, 999], "min_format": format, "max_format": 999
+    }}).to_string().into_bytes()));
+    if v.0 == 1 && v.1 == 20 && v.2 <= 1 {
+        // 1.20.1: buttons live in widgets.png (with the hotbar), sliders in slider.png, both 200×20 rows
+        let mut sheet = game_texture(classpath, "assets/minecraft/textures/gui/widgets.png").ok_or("Не найдены текстуры игры")?;
+        if sheet.width() < 256 {
+            return Err("Не найдены текстуры игры".into());
+        }
+        let k = sheet.width() / 256;
+        let put = |img: &mut RgbaImage, y: u32, b: RgbaImage| {
+            let b = imageops::resize(&b, 200 * k, 20 * k, imageops::FilterType::Nearest);
+            for yy in 0..20 * k {
+                for xx in 0..200 * k {
+                    img.put_pixel(xx, y * k + yy, *b.get_pixel(xx, yy));
+                }
+            }
+        };
+        put(&mut sheet, 46, button(200, 20, mix(base, [0, 0, 0], 0.35), mix(base, [0, 0, 0], 0.1), mix(base, [0, 0, 0], 0.5)));
+        put(&mut sheet, 66, button(200, 20, base, edge, lip));
+        put(&mut sheet, 86, button(200, 20, hi_fill, accent_dark, mix(hi_fill, [0, 0, 0], 0.35)));
+        let mut slider = RgbaImage::new(256, 256);
+        put(&mut slider, 0, button(200, 20, mix(base, [0, 0, 0], 0.25), edge, mix(base, [0, 0, 0], 0.45)));
+        put(&mut slider, 20, button(200, 20, mix(base, [0, 0, 0], 0.25), accent_dark, mix(base, [0, 0, 0], 0.45)));
+        put(&mut slider, 40, button(200, 20, edge, mix(edge, [255, 255, 255], 0.2), lip));
+        put(&mut slider, 60, button(200, 20, accent_dark, mix(accent_dark, [255, 255, 255], 0.3), mix(accent_dark, [0, 0, 0], 0.35)));
+        files.push(("assets/minecraft/textures/gui/widgets.png".into(), png_bytes(&sheet)));
+        files.push(("assets/minecraft/textures/gui/slider.png".into(), png_bytes(&slider)));
+        return zip_files(files);
+    }
     let sprites = "assets/minecraft/textures/gui/sprites/widget/";
     let mut add = |name: &str, img: RgbaImage, w: u32, h: u32, border: u32| {
         files.push((format!("{sprites}{name}.png"), png_bytes(&img)));
@@ -266,7 +335,10 @@ fn pack_bytes(colors: &Value) -> Res<Vec<u8>> {
     add("slider_handle_highlighted", button(8, 20, accent_dark, mix(accent_dark, [255, 255, 255], 0.3), mix(accent_dark, [0, 0, 0], 0.35)), 8, 20, 3);
     add("text_field", button(200, 20, mix(base, [0, 0, 0], 0.45), edge, mix(base, [0, 0, 0], 0.45)), 200, 20, 2);
     add("text_field_highlighted", button(200, 20, mix(base, [0, 0, 0], 0.45), accent_dark, mix(base, [0, 0, 0], 0.45)), 200, 20, 2);
+    zip_files(files)
+}
 
+fn zip_files(files: Vec<(String, Vec<u8>)>) -> Res<Vec<u8>> {
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     // fixed timestamps: identical input -> identical zip
     let opts = zip::write::SimpleFileOptions::default()
@@ -280,16 +352,16 @@ fn pack_bytes(colors: &Value) -> Res<Vec<u8>> {
 }
 
 /// Keeps the button pack in the build's resourcepacks and switches it on once. If the player turns
-/// it off in the game, it stays off. Only for 1.21+, where the buttons are separate pictures.
+/// it off in the game, it stays off. Every version Link supports (1.20+).
 pub fn sync_pack(state: &AppState, inst: &Instance, classpath: &[PathBuf]) -> Res<()> {
     let (p, colors) = prefs(state);
     let game_dir = instances::game_dir(state, &inst.id);
     let packs = game_dir.join("resourcepacks");
     let file = packs.join(PACK_FILE);
     let marker = state.root.join("companion").join("ui").join(&inst.id).join("pack-enabled");
-    let modern = inst.mc_version.split('.').next().map(|m| m != "1").unwrap_or(false)
-        || inst.mc_version.split('.').nth(1).and_then(|m| m.parse::<u32>().ok()).map(|m| m >= 21).unwrap_or(false);
-    if !p.buttons || !modern {
+    let v = mc_parts(&inst.mc_version);
+    let supported = v.0 > 1 || (v.0 == 1 && v.1 >= 20);
+    if !p.buttons || !supported {
         if file.exists() {
             let _ = std::fs::remove_file(&file);
         }
@@ -297,7 +369,7 @@ pub fn sync_pack(state: &AppState, inst: &Instance, classpath: &[PathBuf]) -> Re
         return Ok(());
     }
     std::fs::create_dir_all(&packs).ctx("Не удалось подготовить ресурс-пак")?;
-    let bytes = pack_bytes(&colors)?;
+    let bytes = pack_bytes_for(&colors, &inst.mc_version, classpath)?;
     if std::fs::read(&file).map(|b| b != bytes).unwrap_or(true) {
         std::fs::write(&file, &bytes).ctx("Не удалось записать ресурс-пак")?;
     }
@@ -340,6 +412,26 @@ pub fn sync_pack(state: &AppState, inst: &Instance, classpath: &[PathBuf]) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pack_for_1_20_1_keeps_the_hotbar() {
+        // the game jar as Loom keeps it; skipped where it isn't downloaded
+        let jar = PathBuf::from(std::env::var("HOME").unwrap_or_default() + "/.gradle/caches/fabric-loom/1.20.1/minecraft-client.jar");
+        if !jar.exists() {
+            return;
+        }
+        let bytes = pack_bytes_for(&json!({"panel": "#2e2e2e", "accent": "#3c8527"}), "1.20.1", &[jar.clone()]).unwrap();
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let meta: Value = serde_json::from_reader(z.by_name("pack.mcmeta").unwrap()).unwrap();
+        assert_eq!(meta["pack"]["pack_format"], 15);
+        let mut png = Vec::new();
+        std::io::Read::read_to_end(&mut z.by_name("assets/minecraft/textures/gui/widgets.png").unwrap(), &mut png).unwrap();
+        let ours = image::load_from_memory(&png).unwrap().to_rgba8();
+        let vanilla = game_texture(&[jar], "assets/minecraft/textures/gui/widgets.png").unwrap();
+        assert_eq!(ours.get_pixel(5, 5), vanilla.get_pixel(5, 5), "hotbar untouched");
+        assert_ne!(ours.get_pixel(100, 70), vanilla.get_pixel(100, 70), "button repainted");
+        ours.save("/tmp/widgets-1.20.1.png").unwrap();
+    }
 
     #[test]
     fn pack_is_stable_and_complete() {
@@ -433,7 +525,10 @@ mod live {
         shot("menu");
         if std::env::var("TEST_CLICKS").is_ok() {
             let click = |x: &str, y: &str| {
-                let _ = std::process::Command::new("xdotool").args(["mousemove", x, y, "click", "1"]).status();
+                // relative to the game window, wherever Xvfb put it
+                let _ = std::process::Command::new("xdotool")
+                    .args(["search", "--limit", "1", "--name", "Minecraft", "mousemove", "--window", "%1", x, y, "click", "1"])
+                    .status();
             };
             click("360", "257"); // Continue
             tokio::time::sleep(std::time::Duration::from_secs(wait * 2)).await;

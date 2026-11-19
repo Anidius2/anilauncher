@@ -1,11 +1,8 @@
 package dev.anidius.anilink.ui;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
-import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.network.chat.Component;
 
 /** The main menu in the launcher's style: the build's art, its name and one button to carry on. */
@@ -96,10 +93,9 @@ public final class MenuScreen extends BaseScreen {
 	private void carryOn() {
 		Minecraft mc = Minecraft.getInstance();
 		if (continueWorld) {
-			mc.createWorldOpenFlows().openWorld(continueTarget, () -> Nav.open(this));
+			Nav.openWorld(this, continueTarget);
 		} else {
-			ServerData data = new ServerData(continueTarget, continueTarget, ServerData.Type.OTHER);
-			ConnectScreen.startConnecting(this, mc, ServerAddress.parseString(continueTarget), data, false, null);
+			Nav.connect(this, continueTarget);
 		}
 	}
 

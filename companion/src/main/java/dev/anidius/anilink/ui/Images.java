@@ -27,11 +27,28 @@ public final class Images {
 		Tex tex = null;
 		try (InputStream in = Files.newInputStream(file)) {
 			NativeImage img = NativeImage.read(in);
+			//? if >=1.21 {
 			Identifier id = Identifier.fromNamespaceAndPath("anilink", "ui/" + (counter++));
-			//? if >=1.21.5 {
-			DynamicTexture dyn = new DynamicTexture(() -> "anilink ui", img);
 			//?} else {
+			/*Identifier id = new Identifier("anilink", "ui/" + (counter++));
+			*///?}
+			// Smooth (linear) filtering: big art is scaled to the window, nearest looks jagged.
+			//? if >=26.3 {
+			/*DynamicTexture dyn = new DynamicTexture(() -> "anilink ui", img) {
+				{ sampler = com.mojang.blaze3d.systems.RenderSystem.getSamplerCache()
+						.getClampToEdge(com.mojang.renderpearl.api.textures.FilterMode.LINEAR); }
+			};
+			*///?} else if >=1.21.11 {
+			DynamicTexture dyn = new DynamicTexture(() -> "anilink ui", img) {
+				{ sampler = com.mojang.blaze3d.systems.RenderSystem.getSamplerCache()
+						.getClampToEdge(com.mojang.blaze3d.textures.FilterMode.LINEAR); }
+			};
+			//?} else if >=1.21.5 {
+			/*DynamicTexture dyn = new DynamicTexture(() -> "anilink ui", img);
+			dyn.setFilter(true, false);
+			*///?} else {
 			/*DynamicTexture dyn = new DynamicTexture(img);
+			dyn.setFilter(true, false);
 			*///?}
 			Minecraft.getInstance().getTextureManager().register(id, dyn);
 			tex = new Tex(id, img.getWidth(), img.getHeight());

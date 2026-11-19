@@ -59,7 +59,7 @@ fn jar_for(mc: &str) -> Option<(&'static str, &'static [u8])> {
     }
 }
 
-/// Forge/NeoForge 1.21+ with Mojang names at runtime: the universal jar plus this version's restyled
+/// Forge/NeoForge with Mojang names at runtime: the universal jar plus this version's restyled
 /// menus (built from the same per-version code as the Fabric jars).
 fn forge_ui_jar(mc: &str) -> Option<(&'static str, &'static [u8])> {
     let parts: Vec<u32> = mc.split('.').map(|p| p.parse().unwrap_or(u32::MAX)).collect();
@@ -70,6 +70,10 @@ fn forge_ui_jar(mc: &str) -> Option<(&'static str, &'static [u8])> {
         };
     }
     match (a, b, c) {
+        // NeoForge 1.20.2–1.20.4 builds that already run on Mojang names
+        (1, 20, 2) => jar!("1.20.2"),
+        (1, 20, 3 | 4) => jar!("1.20.4"),
+        (1, 20, 5 | 6) => jar!("1.20.6"),
         (1, 21, 0 | 1) => jar!("1.21.1"),
         (1, 21, 2 | 3) => jar!("1.21.3"),
         (1, 21, 4) => jar!("1.21.4"),
@@ -80,6 +84,23 @@ fn forge_ui_jar(mc: &str) -> Option<(&'static str, &'static [u8])> {
         (26, 1, _) => jar!("26.1"),
         (26, 2, _) => jar!("26.2"),
         (26, 3, _) => jar!("26.3"),
+        _ => None,
+    }
+}
+
+/// Forge/NeoForge on SRG names (1.20–1.20.4): the universal SRG jar plus this version's menus, renamed to SRG.
+fn srg_ui_jar(mc: &str) -> Option<(&'static str, &'static [u8])> {
+    let parts: Vec<u32> = mc.split('.').map(|p| p.parse().unwrap_or(u32::MAX)).collect();
+    let (a, b, c) = (parts.first().copied()?, parts.get(1).copied().unwrap_or(0), parts.get(2).copied().unwrap_or(0));
+    macro_rules! jar {
+        ($v:literal) => {
+            Some((concat!("srg-", $v), include_bytes!(concat!("../companion/anilink-forge-srg-", $v, ".jar")).as_slice()))
+        };
+    }
+    match (a, b, c) {
+        (1, 20, 0 | 1) => jar!("1.20.1"),
+        (1, 20, 2) => jar!("1.20.2"),
+        (1, 20, 3 | 4) => jar!("1.20.4"),
         _ => None,
     }
 }
@@ -125,10 +146,9 @@ fn forge_plan(loader: &str, mc: &str, srg_runtime: Option<bool>) -> Option<(&'st
         Some(false) => moj,
         None => jar,
     };
-    if jar.0 == "mojmap" {
-        if let Some(ui) = forge_ui_jar(mc) {
-            return Some((ui.0, ui.1, way));
-        }
+    let with_menus = if jar.0 == "mojmap" { forge_ui_jar(mc) } else { srg_ui_jar(mc) };
+    if let Some(ui) = with_menus {
+        return Some((ui.0, ui.1, way));
     }
     Some((jar.0, jar.1, way))
 }
@@ -487,6 +507,28 @@ pub async fn link_enable_pack(state: State<'_, AppState>, instance_id: String, f
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn menus_for_every_link_version() {
+        use super::*;
+        for mc in ["1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.11", "26.1", "26.3"] {
+            let (_, fabric) = jar_for(mc).unwrap();
+            assert!(fabric.windows(13).any(|w| w == b"ui/MenuScreen"), "fabric {mc}");
+        }
+        let kind = |l: &str, mc: &str, srg: Option<bool>| forge_plan(l, mc, srg).map(|p| p.0);
+        assert_eq!(kind("forge", "1.20.1", None), Some("srg-1.20.1"));
+        assert_eq!(kind("forge", "1.20.2", None), Some("srg-1.20.2"));
+        assert_eq!(kind("forge", "1.20.4", None), Some("srg-1.20.4"));
+        assert_eq!(kind("neoforge", "1.20.4", Some(false)), Some("1.20.4"));
+        assert_eq!(kind("neoforge", "1.20.2", Some(false)), Some("1.20.2"));
+        assert_eq!(kind("forge", "1.20.6", None), Some("1.20.6"));
+        assert_eq!(kind("neoforge", "1.20.6", None), Some("1.20.6"));
+        assert_eq!(kind("forge", "1.21.11", None), Some("1.21.11"));
+        for mc in ["1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "26.3"] {
+            let (_, bytes, _) = forge_plan("forge", mc, None).unwrap();
+            assert!(bytes.windows(13).any(|w| w == b"ui/MenuScreen"), "forge {mc}");
+        }
+    }
+
     use super::caused_crash;
 
     #[test]

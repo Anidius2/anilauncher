@@ -716,8 +716,8 @@ export function SettingsPage() {
                     <h3 className="settings-sub">{L("Игра в стиле лаунчера", "The game in the launcher's style")}</h3>
                     <p className="muted small">
                       {L(
-                        "Для Minecraft 1.21 и новее на Fabric, Quilt, Forge и NeoForge. Арт и название сборки, твой ник и цвета текущей темы лаунчера. В новых меню всегда есть кнопка «Обычное меню», если нужно меню игры или другого мода. Меняется со следующего запуска игры.",
-                        "For Minecraft 1.21 and newer on Fabric, Quilt, Forge and NeoForge. The build's art and name, your nick and the colours of the current launcher theme. The new menus always have a “Classic menu” button for the game's or another mod's menu. Applies from the next game start.",
+                        "Для Minecraft 1.20 и новее на Fabric, Quilt, Forge и NeoForge. Арт и название сборки, твой ник и цвета текущей темы лаунчера. В новых меню всегда есть кнопка «Обычное меню», если нужно меню игры или другого мода. Меняется со следующего запуска игры.",
+                        "For Minecraft 1.20 and newer on Fabric, Quilt, Forge and NeoForge. The build's art and name, your nick and the colours of the current launcher theme. The new menus always have a “Classic menu” button for the game's or another mod's menu. Applies from the next game start.",
                       )}
                     </p>
                     {(

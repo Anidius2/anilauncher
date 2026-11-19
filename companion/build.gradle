@@ -37,8 +37,8 @@ dependencies {
 
 def javaVersion = (project.property('java_version') as String) as int
 
-// The restyled menus exist for 1.21 and newer; older jars stay as they were.
-def withUi = stonecutter.current.parsed.matches('>=1.21')
+// The restyled menus are in every jar.
+def withUi = true
 if (!withUi) {
 	sourceSets.main.java.exclude('dev/anidius/anilink/ui/**', 'dev/anidius/anilink/mixin/**')
 }
@@ -71,9 +71,10 @@ tasks.register('collectJar', Copy) {
 	dependsOn 'build'
 }
 
-// Forge and NeoForge (Mojang names at runtime) for 1.21+: the universal Forge jar plus this version's
-// menus and mixins, taken from the not-remapped jar (Mojang names, no refmap needed there).
-if (withUi) {
+// Forge and NeoForge with Mojang names at runtime (1.20.5+, and NeoForge 1.20.2–1.20.4 builds that use them): the universal
+// Forge jar plus this version's menus and mixins, taken from the not-remapped jar (no refmap needed there).
+// The SRG versions get theirs below (srgForgeJar).
+if (stonecutter.current.parsed.matches('>=1.20.2')) {
 	// built by forge/ (./gradlew -p forge buildAll); the same file the launcher ships as anilink-forge-mojmap.jar
 	def universal = rootProject.file('forge/mojmap/build/libs/anilink-forge-mojmap-1.0.0.jar')
 	def mixinSrc = rootProject.file('src/main/resources/anilink.mixins.json')
@@ -111,4 +112,76 @@ if (withUi) {
 		into(rootProject.file('../src-tauri/companion'))
 	}
 	tasks.named('collectJar') { dependsOn collectForge }
+}
+
+// Forge 1.20.1–1.20.4 and NeoForge 1.20.2–1.20.4 run on obfuscated SRG names: the universal SRG jar plus this
+// version's menus, renamed Mojang → SRG by tools/Reobf.java (mixin annotations included, so no refmap).
+def mcpConfig = ['1.20.1': '1.20.1-20230612.114412', '1.20.2': '1.20.2-20230921.100330', '1.20.4': '1.20.4-20231207.112700'][mc]
+if (mcpConfig != null) {
+	repositories {
+		maven { name = 'NeoForged'; url = 'https://maven.neoforged.net/releases' }
+	}
+	configurations {
+		reobfTool
+		mcpZip
+	}
+	dependencies {
+		reobfTool 'net.fabricmc:tiny-remapper:0.14.1'
+		reobfTool 'net.fabricmc:mapping-io:0.8.0'
+		mcpZip "de.oceanlabs.mcp:mcp_config:${mcpConfig}@zip"
+	}
+	def devJar = tasks.named('jar')
+	def srgClasses = layout.buildDirectory.file('srg/menus-srg.jar')
+	def reobf = tasks.register('reobfMenus') {
+		dependsOn devJar
+		def tool = rootProject.file('tools/Reobf.java')
+		inputs.file(tool)
+		inputs.files(devJar)
+		outputs.file(srgClasses)
+		doLast {
+			// Mojang's names for this version, as Loom downloaded them
+			def client = fileTree(new File(gradle.gradleUserHomeDir, "caches/fabric-loom/${mc}/layered")).matching { include '**/mojang/client.txt' }.singleFile
+			def game = sourceSets.main.compileClasspath.find { it.name.startsWith("minecraft-merged-${mc}") }
+			def java = org.gradle.internal.jvm.Jvm.current().javaExecutable
+			def out = srgClasses.get().asFile
+			out.parentFile.mkdirs()
+			def proc = [java.path, '-cp', configurations.reobfTool.asPath, tool.path,
+				devJar.get().archiveFile.get().asFile.path, out.path, client.path, configurations.mcpZip.singleFile.path, game.path].execute()
+			proc.consumeProcessOutput(System.out, System.err)
+			if (proc.waitFor() != 0) throw new GradleException('Reobf failed')
+		}
+	}
+	def srgStage = layout.buildDirectory.dir('srg/extra')
+	def srgPrepare = tasks.register('prepareSrgExtras') {
+		def mixinSrc = rootProject.file('src/main/resources/anilink.mixins.json')
+		def toml = rootProject.file('forge/common/resources/META-INF')
+		inputs.file(mixinSrc)
+		inputs.dir(toml)
+		outputs.dir(srgStage)
+		doLast {
+			def out = srgStage.get().asFile
+			project.delete(out)
+			new File(out, 'META-INF').mkdirs()
+			new File(out, 'anilink.mixins.json').text = mixinSrc.text.replace('  "refmap": "anilink-refmap.json",\n', '')
+			def mixins = '\n[[mixins]]\nconfig="anilink.mixins.json"\n'
+			new File(out, 'META-INF/mods.toml').text = new File(toml, 'mods.toml').text + mixins
+			new File(out, 'META-INF/neoforge.mods.toml').text = new File(toml, 'neoforge.mods.toml').text + mixins
+		}
+	}
+	def srgJar = tasks.register('srgForgeJar', Jar) {
+		dependsOn reobf, srgPrepare
+		archiveFileName = "anilink-forge-srg-${mc}.jar"
+		destinationDirectory = layout.buildDirectory.dir('srg')
+		duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+		manifest { attributes('MixinConfigs': 'anilink.mixins.json') }
+		from(srgStage)
+		// built by forge/ (./gradlew -p forge buildAll)
+		from(zipTree(rootProject.file('forge/srg/build/libs/anilink-forge-srg-1.0.0.jar'))) { exclude 'META-INF/MANIFEST.MF' }
+		from(srgClasses.map { zipTree(it) }) { include 'dev/anidius/anilink/ui/**', 'dev/anidius/anilink/mixin/**' }
+	}
+	def collectSrg = tasks.register('collectSrgJar', Copy) {
+		from(srgJar)
+		into(rootProject.file('../src-tauri/companion'))
+	}
+	tasks.named('collectJar') { dependsOn collectSrg }
 }

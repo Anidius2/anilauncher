@@ -251,7 +251,7 @@ pub async fn launch_instance<R: Runtime>(
     .await?;
     // first launch of a build: default game settings, packs and shader switched on
     crate::defaults::first_run(&state, &id, &game_dir, &p.classpath);
-    // the button pack in the launcher's colours (1.21+); never a reason not to start
+    // the button pack in the launcher's colours (1.20+); never a reason not to start
     if let Err(e) = crate::gameui::sync_pack(&state, &inst, &p.classpath) {
         eprintln!("AniLauncher theme pack: {e}");
     }
