@@ -263,7 +263,7 @@ pub async fn modrinth_versions(state: State<'_, AppState>, instance_id: String, 
     let inst = instances::load(&state, &instance_id)?;
     if project_id.starts_with(crate::own::PREFIX) {
         let m = crate::own::find(&state, &project_id).await.ok_or("Этого мода больше нет в каталоге")?;
-        let mut vs: Vec<_> = m.versions.iter().filter(|v| v.mc == inst.mc_version && v.loaders.contains(&inst.loader)).collect();
+        let mut vs: Vec<_> = m.versions.iter().filter(|v| crate::own::fits(v, &inst.mc_version, &inst.loader)).collect();
         vs.sort_by(|a, b| crate::own::cmp_versions(&b.version, &a.version));
         return Ok(vs
             .into_iter()

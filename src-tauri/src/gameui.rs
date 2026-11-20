@@ -72,42 +72,103 @@ fn short_hash(s: &str) -> String {
 
 /// The picture behind the menus: the build's own art, otherwise one of the Mojang key arts the
 /// launcher already keeps, picked by the build so it stays the same between launches.
+fn list_images(dir: PathBuf, ext: &[&str]) -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().is_some_and(|e| ext.iter().any(|x| e.eq_ignore_ascii_case(x))))
+        .collect();
+    v.sort();
+    v
+}
+
 async fn art_source(state: &AppState, inst: &Instance, dir: &Path) -> Option<PathBuf> {
+    // Mojang's full-size wallpapers (2560×1440); the smaller article pictures until they are downloaded
+    crate::news::spawn_wallpapers(state);
+    let wallpapers = list_images(crate::news::wallpaper_dir(&state.root), &["png"]);
     if let Some(a) = &inst.art {
-        if a.kind == "file" {
-            let p = PathBuf::from(&a.value);
-            if p.is_file() {
-                return Some(p);
-            }
+        let own = if a.kind == "file" {
+            Some(PathBuf::from(&a.value)).filter(|p| p.is_file())
         } else if a.value.starts_with("http") {
             let p = dir.join(format!("art-{}", short_hash(&a.value)));
-            if download(state, &a.value, &p).await.is_some() {
-                return Some(p);
-            }
+            download(state, &a.value, &p).await.map(|_| p)
+        } else {
+            None
+        };
+        if let Some(p) = own {
+            // a small Mojang picture chosen in the launcher: the same art as a full-size wallpaper if there is one
+            return Some(sharper_copy(&p, &wallpapers, dir).unwrap_or(p));
         }
     }
-    let list = |dir: PathBuf, ext: &[&str]| -> Vec<PathBuf> {
-        let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.is_file() && p.extension().is_some_and(|e| ext.iter().any(|x| e.eq_ignore_ascii_case(x))))
-            .collect();
-        v.sort();
-        v
-    };
-    // Mojang's full-size wallpapers first; the smaller article pictures until they are downloaded
-    crate::news::spawn_wallpapers(state);
-    let mut heroes = list(crate::news::wallpaper_dir(&state.root), &["png"]);
+    let mut heroes = wallpapers;
     if heroes.is_empty() {
-        heroes = list(state.root.join("cache").join("hero"), &["png", "jpg", "jpeg"]);
+        heroes = list_images(state.root.join("cache").join("hero"), &["png", "jpg", "jpeg"]);
     }
     if heroes.is_empty() {
         return None;
     }
     let pick = u64::from_str_radix(&short_hash(&inst.id)[..8], 16).unwrap_or(0) as usize % heroes.len();
     Some(heroes[pick].clone())
+}
+
+/// Small grey copy of the picture, cropped to `aspect` (`off`: where the crop sits top to bottom,
+/// `zoom`: how much closer than the full width or height).
+fn signature(img: &image::GrayImage, aspect: f32, off: f32, zoom: f32) -> Vec<f32> {
+    let (w, h) = (img.width() as f32, img.height() as f32);
+    let (mut cw, mut ch) = if w / h > aspect { (h * aspect, h) } else { (w, w / aspect) };
+    cw /= zoom;
+    ch /= zoom;
+    let x = ((w - cw) / 2.0).max(0.0) as u32;
+    let y = ((h - ch) * off).max(0.0) as u32;
+    let crop = imageops::crop_imm(img, x, y, cw as u32, ch as u32).to_image();
+    imageops::resize(&crop, 48, 20, imageops::FilterType::Triangle).pixels().map(|p| p.0[0] as f32).collect()
+}
+
+fn distance(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum::<f32>() / a.len() as f32
+}
+
+/// The official wallpaper with the same art as a small picture (an article header is a crop of it,
+/// sometimes with a title on top). None when the picture is already big or nothing matches clearly.
+fn sharper_copy(src: &Path, wallpapers: &[PathBuf], dir: &Path) -> Option<PathBuf> {
+    let (w, _) = image::ImageReader::open(src).ok()?.with_guessed_format().ok()?.into_dimensions().ok()?;
+    if w >= 1800 || wallpapers.is_empty() {
+        return None;
+    }
+    // remembered per picture and wallpaper list: decoding the wallpapers takes a moment
+    let key = format!("{}:{}|{}", src.display(), std::fs::metadata(src).ok()?.len(), wallpapers.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(","));
+    let memo = dir.join("art-match.json");
+    if let Some(m) = crate::util::read_json::<Value>(&memo) {
+        if m["key"].as_str() == Some(key.as_str()) {
+            return m["path"].as_str().map(PathBuf::from).filter(|p| p.is_file());
+        }
+    }
+    let small = image::ImageReader::open(src).ok()?.with_guessed_format().ok()?.decode().ok()?.to_luma8();
+    let aspect = small.width() as f32 / small.height() as f32;
+    let want = signature(&small, aspect, 0.5, 1.0);
+    let mut scores: Vec<(f32, &PathBuf)> = Vec::new();
+    for wp in wallpapers {
+        let Some(big) = image::ImageReader::open(wp).ok().and_then(|r| r.with_guessed_format().ok()).and_then(|r| r.decode().ok()) else { continue };
+        // scale down first: the search below crops it many times
+        let big = big.resize(640, 640, imageops::FilterType::Triangle).to_luma8();
+        let mut best = f32::MAX;
+        for off in [0.3, 0.4, 0.5, 0.6, 0.7] {
+            for zoom in [1.0, 1.1, 1.2] {
+                best = best.min(distance(&want, &signature(&big, aspect, off, zoom)));
+            }
+        }
+        scores.push((best, wp));
+    }
+    scores.sort_by(|a, b| a.0.total_cmp(&b.0));
+    // a clear match: close, and far closer than any other wallpaper
+    let found = match scores.as_slice() {
+        [(d, p), rest @ ..] if *d < 18.0 && rest.first().map_or(true, |(d2, _)| *d < d2 * 0.5) => Some((*p).clone()),
+        _ => None,
+    };
+    let _ = crate::util::write_json(&memo, &json!({"key": key, "path": found}));
+    found
 }
 
 /// Converts any picture to a PNG no bigger than 2560px (the game reads only PNG).
@@ -414,6 +475,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn small_mojang_art_becomes_the_wallpaper() {
+        // needs the downloaded wallpapers and article headers (cargo test real_feed_has_big_art -- --ignored)
+        let wp = list_images(PathBuf::from("/tmp/anilauncher-test/cache/wallpapers"), &["png"]);
+        let hero = PathBuf::from("/tmp/anilauncher-feedtest/cache/hero");
+        if wp.is_empty() || !hero.join("55f910047d80481d.jpg").exists() {
+            return;
+        }
+        let dir = std::env::temp_dir().join("art-match-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let got = |f: &str| sharper_copy(&hero.join(f), &wp, &dir).map(|p| p.file_name().unwrap().to_string_lossy().into_owned());
+        assert_eq!(got("55f910047d80481d.jpg").as_deref(), Some("wallpapers_mounts_of_mayhem_drop.png"));
+        assert_eq!(got("9f3d1fdc528f9503.jpg").as_deref(), Some("wallpapers_chase_the_skies_update.png"));
+        assert_eq!(got("467a575a33f811df.jpg").as_deref(), Some("wallpapers_wilderness_bound_drop.png"));
+        assert_eq!(got("6fbfca28acfeb298.jpeg"), None);
+        assert_eq!(got("90fb9be9b5af75c4.jpg"), None);
+        // the answer is remembered
+        assert_eq!(got("90fb9be9b5af75c4.jpg"), None);
+    }
+
+    #[test]
     fn pack_for_1_20_1_keeps_the_hotbar() {
         // the game jar as Loom keeps it; skipped where it isn't downloaded
         let jar = PathBuf::from(std::env::var("HOME").unwrap_or_default() + "/.gradle/caches/fabric-loom/1.20.1/minecraft-client.jar");
@@ -494,7 +576,10 @@ mod live {
         let inst = instances::Instance {
             id: id.clone(), name: "Выживание с друзьями".into(), mc_version: mc.clone(),
             loader: std::env::var("TEST_LOADER").unwrap_or_else(|_| "fabric".into()), loader_version: std::env::var("TEST_LOADER_VERSION").ok(),
-            memory_mb: Some(2048), width: Some(1280), height: Some(720), jvm_args: std::env::var("TEST_JVM").ok(), ..Default::default()
+            memory_mb: Some(2048), width: Some(1280), height: Some(720), jvm_args: std::env::var("TEST_JVM").ok(),
+            // TEST_ART=<file>: the build's own picture
+            art: std::env::var("TEST_ART").ok().map(|f| instances::Art { kind: "file".into(), value: f }),
+            ..Default::default()
         };
         let game = instances::game_dir(&st, &id);
         std::fs::create_dir_all(game.join("saves")).unwrap();

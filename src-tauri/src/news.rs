@@ -124,7 +124,18 @@ pub async fn get_feed(state: State<'_, AppState>) -> Res<Feed> {
             }
         }
     }
-    feed.art = key_art(&state, &art_links).await;
+    // the full-size wallpapers first (also offered in the build's art picker), then the article headers
+    let mut art: Vec<String> = std::fs::read_dir(wallpaper_dir(&state.root))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "png"))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    art.sort();
+    art.extend(key_art(&state, &art_links).await);
+    feed.art = art;
     spawn_wallpapers(&state);
     let _ = write_json(&cache, &feed);
     Ok(feed)

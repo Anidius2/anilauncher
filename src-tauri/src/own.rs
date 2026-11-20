@@ -34,6 +34,8 @@ pub struct OwnMod {
 pub struct OwnVersion {
     pub version: String,
     pub mc: String,
+    /// The game versions from the jar itself (Fabric style: ">=1.21.6 <1.21.9", alternatives with "||")
+    pub range: String,
     pub loaders: Vec<String>,
     pub file: String,
     pub sha1: String,
@@ -84,13 +86,45 @@ pub async fn catalog(state: &AppState) -> Catalog {
     c
 }
 
-fn fits(v: &OwnVersion, mc: &str, loader: &str) -> bool {
-    v.mc == mc && v.loaders.iter().any(|l| l == loader)
+/// Whether a game version is inside a Fabric-style range. Only explicit bounds widen it:
+/// "~1.21.4" or a bare version means that version alone (a jar for 1.21.4 rarely runs on 1.21.5).
+fn in_range(range: &str, mc: &str) -> bool {
+    range.split("||").any(|alt| {
+        let terms: Vec<&str> = alt.split_whitespace().collect();
+        let bounded = terms.iter().any(|t| t.starts_with('>') || t.starts_with('<'));
+        !terms.is_empty()
+            && bounded
+            && terms.iter().all(|t| {
+                let (op, v) = match t.find(|c: char| c.is_ascii_digit()) {
+                    Some(i) => t.split_at(i),
+                    None => return *t == "*",
+                };
+                let o = cmp_versions(mc, v);
+                match op {
+                    ">=" => o.is_ge(),
+                    ">" => o.is_gt(),
+                    "<=" => o.is_le(),
+                    "<" => o.is_lt(),
+                    _ => o.is_eq(),
+                }
+            })
+    })
 }
 
-/// The newest file of a mod for this game version and loader.
+fn mc_fits(v: &OwnVersion, mc: &str) -> bool {
+    v.mc == mc || in_range(&v.range, mc)
+}
+
+pub fn fits(v: &OwnVersion, mc: &str, loader: &str) -> bool {
+    mc_fits(v, mc) && v.loaders.iter().any(|l| l == loader)
+}
+
+/// The newest file of a mod for this game version and loader; the jar made for exactly this version first.
 pub fn best<'a>(m: &'a OwnMod, mc: &str, loader: &str) -> Option<&'a OwnVersion> {
-    m.versions.iter().filter(|v| fits(v, mc, loader)).max_by(|a, b| cmp_versions(&a.version, &b.version))
+    m.versions
+        .iter()
+        .filter(|v| fits(v, mc, loader))
+        .max_by(|a, b| cmp_versions(&a.version, &b.version).then((a.mc == mc).cmp(&(b.mc == mc))))
 }
 
 pub fn cmp_versions(a: &str, b: &str) -> std::cmp::Ordering {
@@ -112,7 +146,7 @@ pub async fn search(state: &AppState, query: &str, mc: Option<&str>, loader: Opt
         .filter(|m| q.is_empty() || m.name.to_lowercase().contains(&q) || m.id.contains(&q) || m.description.to_lowercase().contains(&q))
         .filter(|m| match (mc, loader) {
             (Some(mc), Some(l)) if !mc.is_empty() && !l.is_empty() => best(m, mc, l).is_some(),
-            (Some(mc), _) if !mc.is_empty() => m.versions.iter().any(|v| v.mc == mc),
+            (Some(mc), _) if !mc.is_empty() => m.versions.iter().any(|v| mc_fits(v, mc)),
             _ => true,
         })
         .collect()
@@ -226,5 +260,27 @@ mod tests {
         assert_eq!(best(&m, "1.21.11", "quilt").unwrap().version, "1.0.1");
         assert!(best(&m, "1.21.11", "forge").is_none());
         assert_eq!(urlencode("a+mc1.21.jar"), "a%2Bmc1.21.jar");
+    }
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    #[test]
+    fn ranges() {
+        assert!(in_range(">=1.21.6 <1.21.9", "1.21.7"));
+        assert!(!in_range(">=1.21.6 <1.21.9", "1.21.9"));
+        assert!(in_range(">=1.21 <1.21.2", "1.21"));
+        assert!(!in_range("~1.21.4", "1.21.5"));
+        assert!(!in_range("1.21.4", "1.21.4"), "exact versions are checked by the mc field");
+        assert!(in_range(">=26.1 <26.2", "26.1.2"));
+        assert!(in_range("1.20.1 || >=1.21 <1.21.2", "1.21.1"));
+        assert!(!in_range("", "1.21.1"));
+        let v = |mc: &str, range: &str| OwnVersion { version: "1.0.1".into(), mc: mc.into(), range: range.into(), loaders: vec!["fabric".into()], ..Default::default() };
+        let m = OwnMod { versions: vec![v("1.21.8", ">=1.21.6 <1.21.9"), v("1.21.5", "~1.21.5")], ..Default::default() };
+        assert_eq!(best(&m, "1.21.7", "fabric").map(|v| v.mc.as_str()), Some("1.21.8"));
+        assert_eq!(best(&m, "1.21.5", "fabric").map(|v| v.mc.as_str()), Some("1.21.5"));
+        assert!(best(&m, "1.21.9", "fabric").is_none());
     }
 }

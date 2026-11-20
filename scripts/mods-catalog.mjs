@@ -35,7 +35,7 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith(".jar")).sort()) {
   const forge = names.includes("META-INF/neoforge.mods.toml") ? ["neoforge", unzip(jar, "META-INF/neoforge.mods.toml")] : names.includes("META-INF/mods.toml") ? ["forge", unzip(jar, "META-INF/mods.toml")] : null;
   if (fabric) {
     const j = JSON.parse(fabric.replace(/^﻿/, ""));
-    info = { id: j.id, name: j.name, description: j.description, author: (j.authors ?? []).map((a) => (typeof a === "string" ? a : a.name)).join(", "), icon: typeof j.icon === "string" ? j.icon : null, version: j.version, mc: cleanMc(j.depends?.minecraft), loaders: ["fabric", "quilt"], deps: Object.keys(j.depends ?? {}).filter((d) => d === "fabric-api" || d === "fabric") };
+    info = { id: j.id, name: j.name, description: j.description, author: (j.authors ?? []).map((a) => (typeof a === "string" ? a : a.name)).join(", "), icon: typeof j.icon === "string" ? j.icon : null, version: j.version, mc: cleanMc(j.depends?.minecraft), range: [j.depends?.minecraft ?? ""].flat().join(" || "), loaders: ["fabric", "quilt"], deps: Object.keys(j.depends ?? {}).filter((d) => d === "fabric-api" || d === "fabric") };
   } else if (quilt) {
     const q = JSON.parse(quilt).quilt_loader;
     info = { id: q.id, name: q.metadata?.name, description: q.metadata?.description, author: Object.keys(q.metadata?.contributors ?? {}).join(", "), icon: q.metadata?.icon, version: q.version, mc: "", loaders: ["quilt"], deps: [] };
@@ -64,7 +64,8 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith(".jar")).sort()) {
       m.icon = `icons/${info.id}.png`;
     }
   }
-  m.versions.push({ version, mc, loaders: info.loaders, file, sha1: createHash("sha1").update(bytes).digest("hex"), size: statSync(jar).size, deps: info.deps });
+  // range: every game version the jar says it runs on (">=1.21.6 <1.21.9"), so 1.21.6 and 1.21.7 builds find the 1.21.8 jar
+  m.versions.push({ version, mc, range: info.range ?? "", loaders: info.loaders, file, sha1: createHash("sha1").update(bytes).digest("hex"), size: statSync(jar).size, deps: info.deps });
   mods.set(info.id, m);
 }
 const out = [...mods.values()].map((m) => ({ ...m, description: extra[m.id] ?? m.description, versions: m.versions.sort((a, b) => cmp(b.version, a.version) || cmp(b.mc, a.mc)) }));
