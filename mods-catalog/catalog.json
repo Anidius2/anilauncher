@@ -1,3 +1,163 @@
 {
-  "mods": []
+  "mods": [
+    {
+      "id": "interactionpreview",
+      "name": "Interaction Preview",
+      "description": "Смотри, что лежит в сундуках, печках и других блоках, не открывая их. Метки жителей, их сделки и подсветка, подписи контейнеров и поиск по содержимому. Работает на клиенте; всё видно вживую в одиночной игре или если мод стоит и на сервере.",
+      "author": "Anidius",
+      "icon": "icons/interactionpreview.png",
+      "versions": [
+        {
+          "version": "1.0.1",
+          "mc": "26.3",
+          "range": "~26.3",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc26.3.jar",
+          "sha1": "21ab4a67126362da16312991c7d2a532b6ae89b1",
+          "size": 508571,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "26.2",
+          "range": "~26.2",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc26.2.jar",
+          "sha1": "ab28b632c2f10f0f198bd2f0d4cbad0f2629d004",
+          "size": 508376,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "26.1",
+          "range": ">=26.1 <26.2",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc26.1.jar",
+          "sha1": "8cacf09beca26a0490443fbd5cbff8fb61010705",
+          "size": 503911,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "1.21.11",
+          "range": "~1.21.11",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc1.21.11.jar",
+          "sha1": "3ba62abe3d9b04a1dda72964ad0c7868e0cc723b",
+          "size": 499102,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "1.21.10",
+          "range": ">=1.21.9 <1.21.11",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc1.21.10.jar",
+          "sha1": "b053e4245ac96e399e1d4c55b191c0147c0c6585",
+          "size": 499122,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "1.21.8",
+          "range": ">=1.21.6 <1.21.9",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc1.21.8.jar",
+          "sha1": "fa10e63d713498c29eacf136a570287a02f69cc2",
+          "size": 505257,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "1.21.5",
+          "range": "~1.21.5",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc1.21.5.jar",
+          "sha1": "dc75384177e5f8e11c61d56db83e7531d85589cc",
+          "size": 505572,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "1.21.4",
+          "range": "~1.21.4",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc1.21.4.jar",
+          "sha1": "6bf88c993ecbd7f79e2f95f69bffce91d6fcb497",
+          "size": 505507,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "1.21.3",
+          "range": ">=1.21.2 <1.21.4",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc1.21.3.jar",
+          "sha1": "51c7d58e4d0007a5267d439a8d798798619382a4",
+          "size": 507248,
+          "deps": [
+            "fabric-api"
+          ]
+        },
+        {
+          "version": "1.0.1",
+          "mc": "1.21.1",
+          "range": ">=1.21 <1.21.2",
+          "loaders": [
+            "fabric",
+            "quilt"
+          ],
+          "file": "interactionpreview-1.0.1+mc1.21.1.jar",
+          "sha1": "5354c0b9c8d373c15301dfe64520b6dea041fe2e",
+          "size": 507010,
+          "deps": [
+            "fabric-api"
+          ]
+        }
+      ]
+    }
+  ]
 }
