@@ -5,9 +5,7 @@ import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.achievement.StatsScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
-import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.network.chat.contents.TranslatableContents;
 import java.util.ArrayList;
 import java.util.List;
 //? if >=1.21.6 {
@@ -59,7 +57,8 @@ public final class PauseMenu extends BaseScreen {
 		// buttons other mods put into the game's pause menu. Wide ones: one per row, or two per row when
 		// there are several. Icons: beside "Classic menu" (up to three), the rest in rows under it.
 		List<AbstractWidget> wide = new ArrayList<>(), icons = new ArrayList<>();
-		modButtons(mc, wide, icons);
+		// the game's own buttons (and Mod Menu's, which this menu already has) stay out
+		foreignButtons(new PauseScreen(true), new String[] {"menu.", "gui.", "modmenu", "fml.menu"}, wide, icons);
 		int pairW = (COL_W - gap) / 2;
 		for (int i = 0; i < wide.size(); i++) {
 			boolean pairs = wide.size() > 1;
@@ -94,44 +93,6 @@ public final class PauseMenu extends BaseScreen {
 		Component leave = mc.isLocalServer() ? Component.translatable("menu.returnToMenu") : Component.translatable("menu.disconnect");
 		button(leave, x, y, COL_W, h, () -> leave(mc));
 		bottom = y + h;
-	}
-
-	private void place(AbstractWidget b, int x, int y, int w) {
-		b.setX(x);
-		b.setY(y);
-		b.setWidth(w);
-		addRenderableWidget(b);
-	}
-
-	/**
-	 * Buttons other mods (Figura, voice chat, replay...) put into the game's own pause menu: the game's menu is
-	 * built off screen so the mods add their buttons as usual, then those buttons move here. They still work
-	 * as before: whatever they open comes back to the pause menu, which is this one again.
-	 */
-	private void modButtons(Minecraft mc, List<AbstractWidget> wide, List<AbstractWidget> icons) {
-		try {
-			PauseScreen vanilla = new PauseScreen(true);
-			//? if >=1.21.11 {
-			vanilla.init(width, height);
-			//?} else {
-			/*vanilla.init(mc, width, height);
-			*///?}
-			for (var child : vanilla.children()) {
-				if (!(child instanceof AbstractButton b) || !b.visible || isVanilla(b)) continue;
-				(b.getWidth() <= 24 ? icons : wide).add(b);
-			}
-		} catch (Throwable ignored) {
-			// a mod's button that can't be moved stays in the classic menu
-		}
-	}
-
-	/** The game's own buttons (and Mod Menu's, which this menu already has): their texts all come from these keys. */
-	private static boolean isVanilla(AbstractWidget b) {
-		if (b.getMessage().getContents() instanceof TranslatableContents t) {
-			String k = t.getKey();
-			return k.startsWith("menu.") || k.startsWith("gui.") || k.startsWith("modmenu") || k.startsWith("fml.menu");
-		}
-		return false;
 	}
 
 	private void openLan(Minecraft mc) {

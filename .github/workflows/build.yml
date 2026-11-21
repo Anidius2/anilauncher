@@ -79,6 +79,8 @@ jobs:
       # Keep the repository's version in step with the release
       - name: Save the new version in the repository
         if: inputs.version != ''
+        # the runner is Windows: PowerShell by default, this script is for bash
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

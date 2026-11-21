@@ -1,6 +1,10 @@
 package dev.anidius.anilink.ui;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.TitleScreen;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.network.chat.Component;
@@ -11,6 +15,7 @@ public final class MenuScreen extends BaseScreen {
 	private boolean continueWorld;
 	private String continueTarget = "";
 	private int continueY = -1;
+	private int top = 24;
 
 	public MenuScreen() {
 		super(Component.literal("AniLauncher"));
@@ -21,10 +26,36 @@ public final class MenuScreen extends BaseScreen {
 		Minecraft mc = Minecraft.getInstance();
 		pickContinue(mc);
 		continueY = -1;
-		int x = left();
-		int y = buttonsTop();
 		int gap = 4, h = 20;
 		boolean ru = UiConfig.ru();
+		int half = (COL_W - gap) / 2;
+
+		// what else the game's title screen has: Realms, language, accessibility and other mods' buttons
+		List<AbstractWidget> wide = new ArrayList<>(), icons = new ArrayList<>();
+		foreignButtons(new TitleScreen(), new String[] {"menu.singleplayer", "menu.multiplayer", "menu.options", "menu.quit", "modmenu", "fml.menu"}, wide, icons);
+		// Options, Mods and the wide ones go two per row
+		List<AbstractWidget> pairs = new ArrayList<>();
+		pairs.add(button(Component.translatable("menu.options"), 0, 0, half, h, () -> Nav.open(Nav.options(this, false))));
+		if (Nav.hasModMenu()) pairs.add(button(Component.literal(ru ? "Моды" : "Mods"), 0, 0, half, h, () -> Nav.openMods(this)));
+		for (AbstractWidget w : wide) pairs.add(addRenderableWidget(w));
+		// icons in rows under "Classic menu / Quit" (beside them the labels would not fit)
+		int beside = 0, besideW = 0;
+		int iconRows = 0;
+		for (int i = beside, ix = COL_W; i < icons.size(); i++) {
+			int w = icons.get(i).getWidth();
+			if (ix + w > COL_W) {
+				iconRows++;
+				ix = 0;
+			}
+			ix += w + gap;
+		}
+		int rows = 2 + (pairs.size() + 1) / 2 + 1 + iconRows;
+		int menuH = rows * (h + gap) + (continueTarget.isEmpty() ? 0 : h + gap + 4);
+		// move up when it would run into the player name at the bottom
+		top = Math.max(8, Math.min(Math.max(24, height / 2 - 92), height - 44 - menuH - 48));
+
+		int x = left();
+		int y = buttonsTop();
 		if (!continueTarget.isEmpty()) {
 			String label = (ru ? "▶ Продолжить: " : "▶ Continue: ") + shorten(continueLabel(), 22);
 			button(Component.literal(label), x, y, COL_W, h, this::carryOn);
@@ -35,16 +66,37 @@ public final class MenuScreen extends BaseScreen {
 		y += h + gap;
 		button(Component.translatable("menu.multiplayer"), x, y, COL_W, h, () -> Nav.open(new JoinMultiplayerScreen(this)));
 		y += h + gap;
-		int half = (COL_W - gap) / 2;
-		if (Nav.hasModMenu()) {
-			button(Component.translatable("menu.options"), x, y, half, h, () -> Nav.open(Nav.options(this, false)));
-			button(Component.literal(ru ? "Моды" : "Mods"), x + half + gap, y, COL_W - half - gap, h, () -> Nav.openMods(this));
-		} else {
-			button(Component.translatable("menu.options"), x, y, COL_W, h, () -> Nav.open(Nav.options(this, false)));
+		for (int i = 0; i < pairs.size(); i++) {
+			boolean right = i % 2 == 1;
+			boolean alone = i == pairs.size() - 1 && !right;
+			AbstractWidget b = pairs.get(i);
+			b.setX(right ? x + half + gap : x);
+			b.setY(y);
+			b.setWidth(alone ? COL_W : right ? COL_W - half - gap : half);
+			if (right || alone) y += h + gap;
 		}
-		y += h + gap;
-		button(Component.literal(ru ? "Обычное меню" : "Classic menu"), x, y, half, h, Nav::classicTitle);
-		button(Component.translatable("menu.quit"), x + half + gap, y, COL_W - half - gap, h, () -> Minecraft.getInstance().stop());
+		int rest = COL_W - besideW;
+		int classicW = (rest - gap) / 2;
+		button(Component.literal(ru ? "Обычное меню" : "Classic menu"), x, y, classicW, h, Nav::classicTitle);
+		// "Выйти из игры" does not fit half a column
+		Component quit = ru ? Component.literal("Выйти") : Component.translatable("menu.quit");
+		button(quit, x + classicW + gap, y, rest - classicW - gap, h, () -> Minecraft.getInstance().stop());
+		int ix = x + rest + gap;
+		for (int i = 0; i < beside; i++) {
+			AbstractWidget b = icons.get(i);
+			place(b, ix, y + (h - b.getHeight()) / 2, b.getWidth());
+			ix += b.getWidth() + gap;
+		}
+		ix = x + COL_W;
+		for (int i = beside; i < icons.size(); i++) {
+			AbstractWidget b = icons.get(i);
+			if (ix + b.getWidth() > x + COL_W) {
+				ix = x;
+				y += h + gap;
+			}
+			place(b, ix, y + (h - b.getHeight()) / 2, b.getWidth());
+			ix += b.getWidth() + gap;
+		}
 	}
 
 	private int left() {
@@ -52,7 +104,7 @@ public final class MenuScreen extends BaseScreen {
 	}
 
 	private int titleTop() {
-		return Math.max(24, height / 2 - 92);
+		return top;
 	}
 
 	private int buttonsTop() {
