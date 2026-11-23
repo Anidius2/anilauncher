@@ -4,6 +4,6 @@
   "package": "dev.anidius.anilink.mixin",
   "compatibilityLevel": "JAVA_17",
   "refmap": "anilink-refmap.json",
-  "client": ["ScreenSwapMixin", "LoadingOverlayMixin", "PauseScreenAccess"],
+  "client": ["ScreenSwapMixin", "LoadingOverlayMixin", "PauseScreenAccess", "MenuBackgroundMixin"],
   "injectors": { "defaultRequire": 0 }
 }
